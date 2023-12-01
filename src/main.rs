@@ -99,7 +99,6 @@ impl LanguageServer for WgslxLanguageServer {
             diagnostics.push(Diagnostic::new_simple(
               Range::new(start, end),
               message
-              // source.to_string()
             ));           
           }
         }

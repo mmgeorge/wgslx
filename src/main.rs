@@ -1,3 +1,6 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+
 use naga::front::wgsl::{parse_str};
 use naga::valid::{Validator, ValidationFlags, Capabilities};
 use tower_lsp::{lsp_types::*, jsonrpc};
@@ -18,7 +21,9 @@ impl LanguageServer for WgslxLanguageServer {
   //
   //--------------------------------------------------------------------------
 
-  async fn initialize(&self, _params: InitializeParams) -> Result<InitializeResult, jsonrpc::Error> {
+  async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult, jsonrpc::Error> {
+    eprintln!("Initializing {:#?}", params);
+    
     Ok(InitializeResult {
       capabilities: ServerCapabilities {
         text_document_sync: Some(TextDocumentSyncCapability::Kind(
@@ -45,25 +50,37 @@ impl LanguageServer for WgslxLanguageServer {
   async fn did_change(&self, params: DidChangeTextDocumentParams) {
     self.client.log_message(MessageType::INFO, "changed!").await;
 
+    let path = Path::new(params.text_document.uri.path());
+    let other_file_path = path.parent()
+      .and_then(|path| Some(path.join(PathBuf::from("other.wgsl")))).unwrap(); 
+     
+    // eprintln!("{:#?} Path: {:?}", params.text_document, other_file_path); 
+
+    let other_file_text = fs::read_to_string(other_file_path).expect("Unable to parse other file");
+
     // For now, we get back the entire source as we only support TextDocumentSyncKind::Full
-    let text = &params.content_changes[0].text; 
+    // let mut text = params.content_changes[0].text.clone();
+    let line_start = other_file_text.as_bytes().iter().filter(|&&c| c == b'\n').count() as u32 + 1;
+    let text = vec![other_file_text, params.content_changes[0].text.clone()].join("\n");
+
+    // eprintln!("text: {:?}", text); 
+
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
 
-
-    if let Err(error) = self.diagnostics(text) {
+    if let Err(error) = self.diagnostics(&text) {
       match error {
         Error::Parse(error) => {
           let labels = error.labels();
 
           for (span, _label) in labels {
-            let location = span.location(text);
+            let location = span.location(&text);
 
-            let start = Position { line: location.line_number - 1, character: location.line_position - 1 };
-            let end = Position { line: location.line_number - 1, character: location.line_position - 1 + location.length }; 
+            let start = Position { line: location.line_number - 1 - line_start, character: location.line_position - 1 };
+            let end = Position { line: location.line_number - 1 - line_start, character: location.line_position - 1 + location.length }; 
             
             diagnostics.push(Diagnostic::new_simple(
               Range::new(start, end),
-              error.emit_to_string(text)
+              format!("[Parse] {}", error.emit_to_string(&text))
             ));         
           }    
         },
@@ -86,9 +103,9 @@ impl LanguageServer for WgslxLanguageServer {
               source = next;
             }
 
-            let location = span.location(text);
-            let start = Position { line: location.line_number - 1, character: location.line_position - 1 };
-            let end = Position { line: location.line_number - 1, character: location.line_position - 1 + location.length };
+            let location = span.location(&text);
+            let start = Position { line: location.line_number - 1 - line_start, character: location.line_position - 1 };
+            let end = Position { line: location.line_number - 1 - line_start, character: location.line_position - 1 + location.length };
 
             // Append with the debug name of the enum to get a better sense of what the error is about
             // Should we remove everything after the parens? (e.g., InvalidArgumentType(Pow, 0, [4]))
@@ -98,7 +115,7 @@ impl LanguageServer for WgslxLanguageServer {
 
             diagnostics.push(Diagnostic::new_simple(
               Range::new(start, end),
-              message
+              format!("[Validation] {}", message)
             ));           
           }
         }
@@ -133,6 +150,9 @@ impl From<naga::WithSpan<naga::valid::ValidationError>> for Error {
 impl WgslxLanguageServer {
   fn diagnostics(&self, source: &str) -> Result<(), Error>{
     let module = parse_str(source)?;
+
+    eprintln!("Parsed Module {:#?}", module);
+    
     let mut validator = Validator::new(ValidationFlags::all(), Capabilities::all());
 
     validator.validate(&module)?; 

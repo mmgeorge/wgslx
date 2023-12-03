@@ -1,7 +1,8 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use naga::front::wgsl::{parse_str};
+use naga::front::wgsl::{parse_str, parse_translation_units, SourceProvider};
 use naga::valid::{Validator, ValidationFlags, Capabilities};
 use tower_lsp::{lsp_types::*, jsonrpc};
 use tower_lsp::{Client, LanguageServer, LspService, Server};
@@ -9,6 +10,25 @@ use tower_lsp::{Client, LanguageServer, LspService, Server};
 #[derive(Debug)]
 struct WgslxLanguageServer {
   client: Client,
+}
+
+struct FileSources<'a> {
+  pub sources: HashMap<&'a Path, &'a str>, 
+}
+
+impl<'a> FileSources<'a> {
+  fn new() -> Self { Self { sources: HashMap::new() } }
+
+  fn insert(&mut self, key: &'a Path, value: &'a str) {
+    self.sources.insert(key, value); 
+  }
+}
+
+impl SourceProvider for FileSources<'_> {
+  fn get_source(&self, path: &Path) -> Option<&str> {
+    eprintln!("Get source {:?}", path); 
+    self.sources.get(path).copied()
+  }
 }
 
 
@@ -22,7 +42,7 @@ impl LanguageServer for WgslxLanguageServer {
   //--------------------------------------------------------------------------
 
   async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult, jsonrpc::Error> {
-    eprintln!("Initializing {:#?}", params);
+    // eprintln!("Initializing {:#?}", params);
     
     Ok(InitializeResult {
       capabilities: ServerCapabilities {
@@ -60,14 +80,19 @@ impl LanguageServer for WgslxLanguageServer {
 
     // For now, we get back the entire source as we only support TextDocumentSyncKind::Full
     // let mut text = params.content_changes[0].text.clone();
-    let line_start = other_file_text.as_bytes().iter().filter(|&&c| c == b'\n').count() as u32 + 1;
-    let text = vec![other_file_text, params.content_changes[0].text.clone()].join("\n");
+    let line_start = 0; //other_file_text.as_bytes().iter().filter(|&&c| c == b'\n').count() as u32 + 1;
+      // let text = vec![other_file_text.clone(), params.content_changes[0].text.clone()].join("\n");
 
-    // eprintln!("text: {:?}", text); 
+    let text = params.content_changes[0].text.clone(); 
+
+    let mut sources = FileSources::new();
+
+    sources.insert(Path::new(params.text_document.uri.as_str()), &params.content_changes[0].text); 
+    sources.insert(Path::new("file:///home/matt/wgslx/test/other.wgsl"), &other_file_text); 
 
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
 
-    if let Err(error) = self.diagnostics(&text) {
+    if let Err(error) = self.diagnostics(&sources, params.text_document.uri.as_str()) {
       match error {
         Error::Parse(error) => {
           let labels = error.labels();
@@ -148,14 +173,15 @@ impl From<naga::WithSpan<naga::valid::ValidationError>> for Error {
 }
 
 impl WgslxLanguageServer {
-  fn diagnostics(&self, source: &str) -> Result<(), Error>{
-    let module = parse_str(source)?;
+    fn diagnostics(&self, provider: &FileSources, path: &str) -> Result<(), Error>{
+    let translation_units = parse_translation_units(provider, path)?; 
+    // let module = parse_str(source)?;
 
-    eprintln!("Parsed Module {:#?}", module);
+    // eprintln!("Parsed Module {:#?}", module);
     
-    let mut validator = Validator::new(ValidationFlags::all(), Capabilities::all());
+    // let mut validator = Validator::new(ValidationFlags::all(), Capabilities::all());
 
-    validator.validate(&module)?; 
+    // validator.validate(&module)?; 
 
     Ok(())
   }

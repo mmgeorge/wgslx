@@ -1,5 +1,5 @@
 
-use std::cell::{RefCell, UnsafeCell};
+use std::cell::{UnsafeCell};
 use std::collections::HashMap;
 use std::fs::{self};
 use std::path::{Path, PathBuf};
@@ -68,6 +68,13 @@ impl FileSources {
   fn insert(&mut self, path: impl AsRef<Path>, source: &str) -> FileId {
     self.inner.get_mut().insert(path.as_ref().to_owned(), source.to_owned())
   }
+
+  fn span_source(&self, span: &naga::Span) -> Option<&str> {
+    let id = span.file_id?;
+    let file = self.get(id)?;
+
+    Some(file.source())
+  }
 }
 
 
@@ -120,6 +127,127 @@ impl<'a> source_provider::Files<'a> for FileSources {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum NagaType<'a> {
+  Global(&'a naga::GlobalVariable),
+  Constant(&'a naga::Constant),
+  Local(&'a naga::LocalVariable),
+  Function(&'a naga::Function),
+  ConstExpression(&'a naga::Expression),
+  FunctionExpression(&'a naga::Function, &'a naga::Expression),
+  Type(&'a naga::Type),
+  Statment(&'a naga::Statement),
+}
+
+
+impl WgslxLanguageServer {
+
+  fn diagnostics(&self, provider: &FileSources, id: FileId) -> Result<naga::Module, Error>{
+    let module = parse_module(provider, id)?;
+    let mut validator = Validator::new(ValidationFlags::all(), Capabilities::all());
+    validator.validate(&module)?; 
+
+    Ok(module)
+  }
+
+  fn arena_iter<T>(arena: &naga::Arena<T>) -> impl Iterator<Item = (&T, naga::Span)> {
+    arena.iter()
+      .map(|(handle, var)| (var, arena.get_span(handle)))
+  }
+
+  fn module_iter(module: &naga::Module) -> impl Iterator<Item = (NagaType, naga::Span)> {
+    let globals = Self::arena_iter(&module.global_variables).map(|(item, span)| (NagaType::Global(item), span));
+    let constants = Self::arena_iter(&module.constants).map(|(item, span)| (NagaType::Constant(item), span));
+    let types = module.types.iter()
+      .map(|(handle, var)| (var, module.types.get_span(handle)))
+      .map(|(item, span)| (NagaType::Type(item), span)); 
+    let const_exprs = Self::arena_iter(&module.const_expressions).map(|(item, span)| (NagaType::ConstExpression(item), span));
+    let functions = Self::arena_iter(&module.functions).map(|(item, span)| (NagaType::Function(item), span));
+    let function_exprs =  module.functions.iter()
+          .flat_map(|(_, func)| Self::arena_iter(&func.expressions).map(|(expr, span)| (NagaType::FunctionExpression(func, expr), span)));
+    let function_locals =  module.functions.iter()
+      .flat_map(|(_, func)| Self::arena_iter(&func.local_variables))
+      .map(|(item, span)| (NagaType::Local(item), span)); 
+    let function_body =  module.functions.iter()
+      .flat_map(|(_, func)| func.body.span_iter())
+      .map(|(item, span)| (NagaType::Statment(item), *span)); 
+
+    globals
+      .chain(constants)
+      .chain(const_exprs)
+      .chain(types)
+      .chain(functions)
+      .chain(function_exprs)
+      .chain(function_locals)
+      .chain(function_body)
+  }
+
+  fn intersecting_items<'a>(&'a self, sources: &FileSources, module: &'a naga::Module, position: &Position) -> Vec<(NagaType, naga::Span)> {
+    Self::module_iter(module)
+      .map(|(item, span)| (item, span, sources.span_source(&span)))
+      .filter(|(.., source)| source.is_some())
+      .filter(|(item, span, source)| {
+        let prefix = &source.unwrap()[..span.start as usize];
+        let substring = &source.unwrap()[span.start as usize..span.end as usize];
+        let line_number = prefix.matches('\n').count() as u32;
+        let line_count = substring.matches('\n').count() as u32;
+        let line_start = prefix.rfind('\n').map(|pos| pos + 1).unwrap_or(0); 
+        let start_char = source.unwrap()[line_start..span.start as usize].chars().count() as u32;
+        let end_char = line_start as u32 + span.end - span.start; //substring.rfind('\n').unwrap_or(span.end as usize) as u32; 
+
+          if let NagaType::FunctionExpression(_, expr) = item {
+              eprintln!("{:?}:{:?}-{:?}:{:?} {:?}:{:?} {:?}", line_number, start_char, line_number + line_count, end_char, position.line, position.character, expr); 
+          }
+
+          line_number <= position.line &&
+              line_number + line_count >= position.line &&
+              start_char <= position.character &&
+              end_char >= position.character
+      })
+      .map(|(item, span, _)| (item, span))
+      .collect::<Vec<(NagaType, naga::Span)>>()
+  }
+
+  fn direct_item<'a>(&'a self, sources: &FileSources, module: &'a naga::Module, position: &Position) -> Option<(NagaType, naga::Span)> {
+    let items = self.intersecting_items(sources, module, position);
+
+    items.iter()
+      .reduce(|prev, item| {
+        let (_, span) = prev;
+        let (_, next_span) = item; 
+        let prev_size = span.end - span.start; 
+        let size = next_span.end - next_span.start; 
+
+        if size < prev_size {
+          item
+        } else {
+          prev
+        }
+      }).copied()
+  }
+
+  fn goto_span<'a>(&'a self, sources: &FileSources, module: &'a naga::Module, position: &Position) -> Option<naga::Span> {
+    let (naga_type, span) = self.direct_item(&sources, &module, &position)?;
+
+    eprintln!("call goto_span {:#?}", naga_type); 
+
+    match naga_type {
+        NagaType::FunctionExpression(_, naga::Expression::GlobalVariable(handle)) => Some(module.global_variables.get_span(*handle)),
+        NagaType::FunctionExpression(_, naga::Expression::Constant(handle)) => Some(module.constants.get_span(*handle)),
+        NagaType::FunctionExpression(_, naga::Expression::CallResult(handle)) => Some(module.functions.get_span(*handle)),
+        NagaType::FunctionExpression(func, naga::Expression::Load { pointer }) => {
+            let expression = &func.expressions[*pointer];
+
+            match expression {
+                naga::Expression::LocalVariable(handle) => Some(func.local_variables.get_span(*handle)),
+                _ => None
+            }
+        }
+        _ => None
+    }
+  }
+}
+
 #[tower_lsp::async_trait]
 impl LanguageServer for WgslxLanguageServer {
   
@@ -144,6 +272,8 @@ impl LanguageServer for WgslxLanguageServer {
             supported: Some(true), 
           })
         }),
+        
+        definition_provider: Some(OneOf::Left(true)),
         ..Default::default()
       }, 
       ..Default::default()
@@ -157,6 +287,37 @@ impl LanguageServer for WgslxLanguageServer {
   async fn shutdown(&self) -> Result<(), jsonrpc::Error> {
     Ok(())
   }
+
+  async fn goto_definition(&self, params: GotoDefinitionParams) -> Result<Option<GotoDefinitionResponse>, jsonrpc::Error> {
+    eprintln!("Goto DEF"); 
+    self.client.log_message(MessageType::INFO, format!("Request definition! {:#?}", params)).await;
+
+    let uri = params.text_document_position_params.text_document.uri; 
+    let sources = FileSources::new();
+    let id = sources.visit(Path::new(uri.path()));
+    let module = self.diagnostics(&sources, id.unwrap()).unwrap(); 
+    let position = params.text_document_position_params.position;
+
+    if let Some(span) = self.goto_span(&sources, &module, &position) {
+      let id = span.file_id.unwrap() ; 
+      let source = sources.get(id).unwrap().source(); 
+      let location = span.location(source);
+
+      let start = Position { line: location.line_number - 1, character: location.line_position - 1 };
+      let end = Position { line: location.line_number - 1, character: location.line_position - 1 + location.length };
+
+      let file = sources.get(id);
+      let path = Url::from_file_path(file.unwrap().path()).unwrap();
+      
+      let response = GotoDefinitionResponse::Scalar(
+        Location::new(path, Range::new(start, end)));
+
+      return Ok(Some(response));   
+    }
+
+    Ok(None)
+  }
+
 
   async fn did_open(&self, params: DidOpenTextDocumentParams) {
     self.client.log_message(MessageType::INFO, "file opened!").await; 
@@ -252,6 +413,7 @@ impl LanguageServer for WgslxLanguageServer {
   }
 }
 
+#[derive(Debug)]
 enum Error {
   Parse(naga::front::wgsl::ParseError) ,
   Validation(naga::WithSpan<naga::valid::ValidationError>), 
@@ -269,14 +431,6 @@ impl From<naga::WithSpan<naga::valid::ValidationError>> for Error {
   }
 }
 
-impl WgslxLanguageServer {
-    fn diagnostics(&self, provider: &FileSources, id: FileId) -> Result<(), Error>{
-        let module = parse_module(provider, id)?;
-        let mut validator = Validator::new(ValidationFlags::all(), Capabilities::all());
-        validator.validate(&module)?; 
-        Ok(())
-  }
-}
 
 #[tokio::main]
 async fn main() {

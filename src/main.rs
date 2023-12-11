@@ -208,7 +208,7 @@ impl WgslxLanguageServer {
   fn intersecting_items<'a>(&'a self, sources: &FileSources, module: &'a naga::Module, position: &Position) -> Vec<(NagaType, naga::Span)> {
     Self::module_iter(module)
       .map(|(item, span)| {
-        if let NagaType::FunctionNamedExpression(expr) = item {
+        if let NagaType::FunctionExpression(func, expr) = item {
           eprintln!("named {:?} {:?}", expr, span); 
         }
         (item, span, sources.span_source(&span))
@@ -260,7 +260,12 @@ impl WgslxLanguageServer {
   fn goto_span<'a>(&'a self, sources: &FileSources, module: &'a naga::Module, position: &Position, id: FileId) -> Option<naga::Span> {
     let (naga_type, span) = self.direct_item(&sources, &module, &position, id)?;
 
-    eprintln!("call goto_span {:#?}", naga_type); 
+    eprintln!("call goto_span {:#?}", naga_type);
+
+    let file = sources.get(span.file_id?)?;
+    let source = file.source();
+    let (line_offset, _) = source.match_indices('\n').nth(position.line as usize - 1)?;
+    let position_start = line_offset + position.character as usize;
 
     match naga_type {
       NagaType::FunctionArgumentType(handle) => Some(module.types.get_span(handle)),
@@ -268,6 +273,15 @@ impl WgslxLanguageServer {
       NagaType::FunctionExpression(_, naga::Expression::GlobalVariable(handle)) => Some(module.global_variables.get_span(*handle)),
       NagaType::FunctionExpression(_, naga::Expression::Constant(handle)) => Some(module.constants.get_span(*handle)),
       NagaType::FunctionExpression(_, naga::Expression::CallResult(handle)) => Some(module.functions.get_span(*handle)),
+      NagaType::FunctionExpression(func, naga::Expression::Compose { components, .. }) => {
+        // We can only wind up here if we are pointing directly to a named expression. Otherwise we have a
+        // load of some variable, or an accessor, which have their own spans and would have taken priority.
+        let substr = &source[span.start as usize..position_start]; 
+        let index = substr.matches(',').count(); 
+        let component = components[index];
+
+        Some(func.expressions.get_span(component))
+      },
       NagaType::FunctionExpression(func, naga::Expression::Load { pointer }) => {
         match &func.expressions[*pointer] {
           naga::Expression::LocalVariable(handle) => Some(func.local_variables.get_span(*handle)),
@@ -283,16 +297,12 @@ impl WgslxLanguageServer {
           },
           _ => None
         }
-      }
+      }, 
       NagaType::FunctionExpression(func, naga::Expression::AccessIndex { base, index }) => {
         // AccessIndex refer to indexing a property on a struct. If we left of the .,
         // return the variable that we are indexing. Otherwise, we will jump to the
         // corresponding type definition for the struct
         let expression = &func.expressions[*base];
-        let file = sources.get(span.file_id?)?;
-        let source = file.source();
-        let (line_offset, _) = source.match_indices('\n').nth(position.line as usize - 1)?;
-        let position_start = line_offset + position.character as usize;
         let source_to_end = &source[..span.end as usize];
         let dot_offset = source_to_end.rfind('.').unwrap(); // Must exist for AccessIndex
 
@@ -357,6 +367,8 @@ impl LanguageServer for WgslxLanguageServer {
           inter_file_dependencies: true,
           ..Default::default()
         })),
+        // position_encoding: Some(PositionEncodingKind::UTF8),
+        hover_provider: Some(HoverProviderCapability::Simple(true)),
         ..Default::default()
       }, 
       ..Default::default()

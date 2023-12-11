@@ -415,11 +415,7 @@ impl LanguageServer for WgslxLanguageServer {
     self.client.log_message(MessageType::INFO, format!("changed! {}", params.text_document.uri)).await;
 
     let mut sources = FileSources::new();
-
-    let uri2 = params.text_document.uri.clone(); 
     let id = sources.insert(params.text_document.uri.path(), &params.content_changes[0].text);
-
-
     let mut diagnostics_by_file = HashMap::<FileId, Vec<Diagnostic>>::new(); 
 
     if let Err(error) = self.diagnostics(&sources, id) {

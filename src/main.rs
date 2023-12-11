@@ -330,7 +330,7 @@ impl WgslxLanguageServer {
               _ => Some(span)
             }
           },
-          _ => None
+          _ => Some(func.expressions.get_span(*base))
         }
       }, 
       _ => None

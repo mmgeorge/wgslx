@@ -177,7 +177,6 @@ impl WgslxLanguageServer {
 
     let function_named_exprs =  module.functions.iter()
       .flat_map(|(_, func)| func.named_expressions.values().map(|expr| (NagaType::FunctionNamedExpression(expr), expr.span)));
-    
     let function_locals =  module.functions.iter()
       .flat_map(|(_, func)| Self::arena_iter(&func.local_variables))
       .map(|(item, span)| (NagaType::Local(item), span)); 
@@ -272,7 +271,7 @@ impl WgslxLanguageServer {
       NagaType::FunctionExpression(func, naga::Expression::Load { pointer }) => {
         match &func.expressions[*pointer] {
           naga::Expression::LocalVariable(handle) => Some(func.local_variables.get_span(*handle)),
-          naga::Expression::AccessIndex { base, index } => {
+          naga::Expression::AccessIndex { base, .. } => {
             match &func.expressions[*base] {
               naga::Expression::FunctionArgument(index) => {
                 let arg = &func.arguments[*index as usize];
@@ -286,30 +285,21 @@ impl WgslxLanguageServer {
         }
       }
       NagaType::FunctionExpression(func, naga::Expression::AccessIndex { base, index }) => {
-        let expression = &func.expressions[*base];
-
         // AccessIndex refer to indexing a property on a struct. If we left of the .,
         // return the variable that we are indexing. Otherwise, we will jump to the
         // corresponding type definition for the struct
-        let access_span = span; //func.expressions.get_span(naga_type);
-        // let access_span_source = sources.source_at(access_span)?;
-
-        let file = sources.get(access_span.file_id?)?;
+        let expression = &func.expressions[*base];
+        let file = sources.get(span.file_id?)?;
         let source = file.source();
-
         let (line_offset, _) = source.match_indices('\n').nth(position.line as usize - 1)?;
         let position_start = line_offset + position.character as usize;
-
-        let source_to_end = &source[..access_span.end as usize];
+        let source_to_end = &source[..span.end as usize];
         let dot_offset = source_to_end.rfind('.').unwrap(); // Must exist for AccessIndex
 
         match expression {
           naga::Expression::FunctionArgument(arg_index) => {
             let arg = &func.arguments[*arg_index as usize];
             let ty = &module.types[arg.ty];
-
-            eprintln!("start: {:?} offset: {:?} {:?}", position_start, dot_offset, sources.source_at(span));
-
             let span = module.types.get_span(arg.ty); 
 
             // If we are before the dot, return the variable
@@ -437,38 +427,10 @@ impl LanguageServer for WgslxLanguageServer {
         Error::Parse(error) => {
           eprintln!("Got error {:#?}", error);
 
-          // Related diagnostics not supported by lsp-mode
-          // 
-          // let related: Vec<_> = error.labels().skip(1)
-          //       .map(|(span, message)| {
-          //           let file = sources.get(id).unwrap(); 
-          //           let source = file.source(); 
-          //           let location = span.location(&source);
-
-          //           let mut path = String::from("file://");
-
-          //           path.push_str(file.path().to_str().unwrap()); 
-          
-          //           eprintln!("path: {}", path);
-          
-          //           let uri = Url::parse(&path)
-          //               .expect("Unable to parse file path"); 
-
-          //           let start = Position { line: location.line_number - 1, character: location.line_position - 1 };
-          //           let end = Position { line: location.line_number - 1,
-          //                                character: location.line_position - 1 + location.length };
-
-          //           let location = Location {
-          //               uri: uri2.clone(),
-          //               range: Range::new(start, end)
-          //           }; 
-
-          //           DiagnosticRelatedInformation { location, message: message.to_string() }
-          //       }).collect();
-
+          // Related diagnostics not supported by lsp-mode, pass as info instead
           for (span, label) in error.labels() {
             let source = sources.get(id).unwrap().source(); 
-            let location = span.location(&source);
+            let location = span.location(source);
             let start = Position { line: location.line_number - 1, character: location.line_position - 1 };
             let end = Position { line: location.line_number - 1, character: location.line_position - 1 + location.length };
             let diagnostics = diagnostics_by_file.entry(span.file_id.unwrap())
@@ -479,15 +441,15 @@ impl LanguageServer for WgslxLanguageServer {
               Some(DiagnosticSeverity::INFORMATION),
               None,
               None,
-              format!("{}", label),
-              None, // Some(related),
+              label.to_string(),
+              None,
               None
             ));
           }
 
           if let Some((span, _label)) = error.labels().next() {
             let source = sources.get(id).unwrap().source(); 
-            let location = span.location(&source);
+            let location = span.location(source);
             let start = Position { line: location.line_number - 1, character: location.line_position - 1 };
             let end = Position { line: location.line_number - 1, character: location.line_position - 1 + location.length };
             let diagnostics = diagnostics_by_file.entry(span.file_id.unwrap())
@@ -504,11 +466,6 @@ impl LanguageServer for WgslxLanguageServer {
               None, // Some(related),
               None
             ));
-
-            // diagnostics.push(Diagnostic::new_simple(
-            //     Range::new(start, end),
-            //     format!("[notes] {}", notes)
-            // ));         
           }
         },
         Error::Validation(error) => {

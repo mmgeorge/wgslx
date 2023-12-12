@@ -257,6 +257,72 @@ impl WgslxLanguageServer {
       }).copied()
   }
 
+  fn do_hover<'a>(&'a self, sources: &FileSources, module: &'a naga::Module, position: &Position, id: FileId) -> Option<Hover> {
+      let (item, span) = self.direct_item(sources, module, position, id)?;
+      
+    let file = sources.get(span.file_id?)?;
+    let source = file.source();
+    let line_offset = if position.line > 0 {
+      source.match_indices('\n').nth(position.line as usize - 1)?.0
+    }
+    else {
+      0
+    }; 
+
+    
+    let position_start = line_offset + position.character as usize + 1; // + 1 to skip over newline
+
+    let ty = match item {
+      NagaType::Global(naga::GlobalVariable { ty, .. }) => Some(&module.types[*ty]),
+      NagaType::Constant(naga::Constant { ty, .. }) => Some(&module.types[*ty]),
+      NagaType::FunctionNamedExpression(naga::NamedExpression { ty: Some(ty), .. }) => Some(&module.types[*ty]),
+      NagaType::Local(naga::LocalVariable { ty, .. }) => Some(&module.types[*ty]),
+      NagaType::FunctionExpression(func, naga::Expression::Compose { components, ty }) => {
+        // We can only wind up here if we are pointing directly to a named expression. Otherwise we have a
+        // load of some variable, or an accessor, which have their own spans and would have taken priority.
+        let substr = &source[span.start as usize..position_start + 1]; // +1 for inclusive range
+
+        // If we are left of the paren, jump to the type we are composing
+        if substr.rfind('(').is_none() {
+          Some(&module.types[*ty])
+        } else {
+          // Otherwise, we are within the compose. Jump to closest index definition 
+          let index = substr.matches(',').count();
+          let component = components[index];
+          let named_expr = func.named_expressions.get(&component)?; 
+          let named_ty = &module.types[named_expr.ty?]; 
+          
+          Some(named_ty)
+        }
+      },
+      NagaType::FunctionExpression(func, naga::Expression::Load { pointer }) => {
+        match &func.expressions[*pointer] {
+          naga::Expression::LocalVariable(handle) => Some(&module.types[func.local_variables[*handle].ty]),
+          naga::Expression::AccessIndex { base, .. } => {
+            match &func.expressions[*base] {
+              naga::Expression::FunctionArgument(index) => {
+                let arg = &func.arguments[*index as usize];
+
+                Some(&module.types[arg.ty])
+              },
+              _ => None
+            }
+          },
+          _ => None
+        }
+      }, 
+      _ => None
+    }?;
+
+    let contents = format!("{:?}", ty.inner);
+    let hover = Hover {
+      contents: HoverContents::Scalar(MarkedString::String(contents)),
+      range: None
+    }; 
+    
+    Some(hover)
+  }
+
   fn goto<'a>(&'a self, sources: &FileSources, module: &'a naga::Module, position: &Position, id: FileId) -> Option<GotoDefinitionResponse> {
     let span = self.goto_span(sources, module, position, id)?;
 
@@ -276,7 +342,7 @@ impl WgslxLanguageServer {
   }
 
   fn goto_span<'a>(&'a self, sources: &FileSources, module: &'a naga::Module, position: &Position, id: FileId) -> Option<naga::Span> {
-    let (naga_type, span) = self.direct_item(&sources, &module, &position, id)?;
+    let (naga_type, span) = self.direct_item(sources, module, position, id)?;
 
     eprintln!("call goto_span {:#?}", naga_type);
 
@@ -415,6 +481,24 @@ impl LanguageServer for WgslxLanguageServer {
     Ok(())
   }
 
+  async fn hover(&self, params: HoverParams) -> Result<Option<Hover>, jsonrpc::Error> {
+    eprintln!("{:?}", params);
+
+    let uri = params.text_document_position_params.text_document.uri; 
+    let sources = FileSources::new();
+    let id = sources.visit(Path::new(uri.path())).unwrap();
+    let module = self.module(&sources, id);
+
+    if module.is_err() {
+      return Ok(None);
+    }
+
+    let position = params.text_document_position_params.position;
+    let hover = self.do_hover(&sources, &module.unwrap(), &position, id);
+
+    Ok(hover)
+  }
+
   async fn goto_definition(&self, params: GotoDefinitionParams) -> Result<Option<GotoDefinitionResponse>, jsonrpc::Error> {
     self.client.log_message(MessageType::INFO, format!("Request definition! {:#?}", params)).await;
 
@@ -432,7 +516,6 @@ impl LanguageServer for WgslxLanguageServer {
     
     Ok(response)
   }
-
 
   async fn did_open(&self, params: DidOpenTextDocumentParams) {
     self.client.log_message(MessageType::INFO, "file opened!").await; 

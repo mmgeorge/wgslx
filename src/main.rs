@@ -257,6 +257,24 @@ impl WgslxLanguageServer {
       }).copied()
   }
 
+  fn goto<'a>(&'a self, sources: &FileSources, module: &'a naga::Module, position: &Position, id: FileId) -> Option<GotoDefinitionResponse> {
+    let span = self.goto_span(sources, module, position, id)?;
+
+    // We may get back an empty span, created with Span::default(), e.g., in the case of a standard type
+    // being returned from the types Arena
+    let id = span.file_id?; 
+    let source = sources.get(id).unwrap().source(); 
+    let location = span.location(source);
+
+    let start = Position { line: location.line_number - 1, character: location.line_position - 1 };
+    let end = Position { line: location.line_number - 1, character: location.line_position - 1 + location.length };
+
+    let file = sources.get(id);
+    let path = Url::from_file_path(file.unwrap().path()).unwrap();
+    
+    Some(GotoDefinitionResponse::Scalar(Location::new(path, Range::new(start, end))))
+  }
+
   fn goto_span<'a>(&'a self, sources: &FileSources, module: &'a naga::Module, position: &Position, id: FileId) -> Option<naga::Span> {
     let (naga_type, span) = self.direct_item(&sources, &module, &position, id)?;
 
@@ -264,8 +282,15 @@ impl WgslxLanguageServer {
 
     let file = sources.get(span.file_id?)?;
     let source = file.source();
-    let (line_offset, _) = source.match_indices('\n').nth(position.line as usize - 1)?;
-    let position_start = line_offset + position.character as usize;
+    let line_offset = if position.line > 0 {
+      source.match_indices('\n').nth(position.line as usize - 1)?.0
+    }
+    else {
+      0
+    }; 
+
+    
+    let position_start = line_offset + position.character as usize + 1; // + 1 to skip over newline
 
     match naga_type {
       NagaType::FunctionArgumentType(handle) => Some(module.types.get_span(handle)),
@@ -273,11 +298,18 @@ impl WgslxLanguageServer {
       NagaType::FunctionExpression(_, naga::Expression::GlobalVariable(handle)) => Some(module.global_variables.get_span(*handle)),
       NagaType::FunctionExpression(_, naga::Expression::Constant(handle)) => Some(module.constants.get_span(*handle)),
       NagaType::FunctionExpression(_, naga::Expression::CallResult(handle)) => Some(module.functions.get_span(*handle)),
-      NagaType::FunctionExpression(func, naga::Expression::Compose { components, .. }) => {
+      NagaType::FunctionExpression(func, naga::Expression::Compose { components, ty }) => {
         // We can only wind up here if we are pointing directly to a named expression. Otherwise we have a
         // load of some variable, or an accessor, which have their own spans and would have taken priority.
-        let substr = &source[span.start as usize..position_start]; 
-        let index = substr.matches(',').count(); 
+        let substr = &source[span.start as usize..position_start + 1]; // +1 for inclusive range
+
+        // If we are left of the paren, jump to the type we are composing
+        if substr.rfind('(').is_none() {
+          return Some(module.types.get_span(*ty));
+        }
+
+        // Otherwise, we are within the compose. Jump to closest index definition 
+        let index = substr.matches(',').count();
         let component = components[index];
 
         Some(func.expressions.get_span(component))
@@ -367,7 +399,7 @@ impl LanguageServer for WgslxLanguageServer {
           inter_file_dependencies: true,
           ..Default::default()
         })),
-        // position_encoding: Some(PositionEncodingKind::UTF8),
+        position_encoding: Some(PositionEncodingKind::UTF8),
         hover_provider: Some(HoverProviderCapability::Simple(true)),
         ..Default::default()
       }, 
@@ -395,27 +427,10 @@ impl LanguageServer for WgslxLanguageServer {
       return Ok(None);
     }
 
-    
     let position = params.text_document_position_params.position;
-
-    if let Some(span) = self.goto_span(&sources, &module.unwrap(), &position, id) {
-      let id = span.file_id.unwrap() ; 
-      let source = sources.get(id).unwrap().source(); 
-      let location = span.location(source);
-
-      let start = Position { line: location.line_number - 1, character: location.line_position - 1 };
-      let end = Position { line: location.line_number - 1, character: location.line_position - 1 + location.length };
-
-      let file = sources.get(id);
-      let path = Url::from_file_path(file.unwrap().path()).unwrap();
-      
-      let response = GotoDefinitionResponse::Scalar(
-        Location::new(path, Range::new(start, end)));
-
-      return Ok(Some(response));   
-    }
-
-    Ok(None)
+    let response = self.goto(&sources, &module.unwrap(), &position, id);
+    
+    Ok(response)
   }
 
 

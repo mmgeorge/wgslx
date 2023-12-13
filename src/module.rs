@@ -2,10 +2,11 @@ use naga::{front::wgsl::{source_provider::{FileId, SourceProvider}, parse_module
 use tower_lsp::lsp_types::Position;
 use crate::file_sources::FileSources;
 
-use self::{error::Error, naga_type::NagaType};
+use self::{error::Error, naga_type::NagaType, diagnostic::Diagnostic};
 
 pub mod error;
-pub mod naga_type; 
+pub mod naga_type;
+pub mod diagnostic;
 
 pub struct Module {
   // sources: &'a FileSources,
@@ -20,7 +21,15 @@ impl Module {
     Ok(Self { inner: module })
   }
 
-  pub fn diagnostics(provider: &FileSources, id: FileId) -> Result<(), Error> {
+  pub fn diagnostics(provider: &FileSources, id: FileId) -> Vec<Diagnostic> {
+    if let Err(error) = Self::validate(provider, id) {
+      return error.into(); 
+    }
+
+    return vec![]
+  }
+
+  fn validate(provider: &FileSources, id: FileId) -> Result<(), Error> {
     let module = parse_module(provider, id)?;
     let mut validator = Validator::new(ValidationFlags::all(), Capabilities::all());
 

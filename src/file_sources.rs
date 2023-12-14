@@ -19,7 +19,8 @@ pub struct FileSourcesInner {
 }
 
 impl FileSourcesInner {
-  pub fn ensure(&mut self, path: PathBuf) -> Option<FileId> {
+  pub fn ensure(&mut self, path: impl AsRef<Path>) -> Option<FileId> {
+    let path = path.as_ref().to_path_buf(); 
     let entry = self.ids.entry(path.clone())
       .or_insert_with(|| {
         self.counter += 1;
@@ -72,11 +73,11 @@ impl FileSources {
 
 impl source_provider::SourceProvider<'_> for FileSources {
 
-  fn visit(&self, path: &Path) -> Option<FileId> {
+  fn visit(&self, path: impl AsRef<Path>) -> Option<FileId> {
     unsafe {
       let inner = &mut *self.inner.get();
 
-      inner.ensure(path.to_owned())
+      inner.ensure(path)
     }
   }
 

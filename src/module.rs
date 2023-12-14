@@ -1,12 +1,14 @@
-use naga::{front::wgsl::{source_provider::{FileId, SourceProvider}, parse_module}, valid::{Validator, Capabilities, ValidationFlags}};
-use tower_lsp::lsp_types::Position;
+use naga::{front::wgsl::{source_provider::{FileId, SourceProvider, Files}, parse_module}, valid::{Validator, Capabilities, ValidationFlags}};
 use crate::file_sources::FileSources;
 
-use self::{error::Error, naga_type::NagaType, diagnostic::Diagnostic};
+use self::{error::Error, naga_type::NagaType, diagnostic::Diagnostic, search_position::SearchPosition, definition::Definition};
 
 pub mod error;
 pub mod naga_type;
 pub mod diagnostic;
+pub mod search_position;
+
+mod definition; 
 
 pub struct Module {
   // sources: &'a FileSources,
@@ -85,7 +87,7 @@ impl Module {
       .chain(function_result)
   }
 
-  fn iter_intersecting<'a>(&'a self, sources: &'a FileSources, position: &'a Position) -> impl Iterator<Item = (NagaType, naga::Span)> {
+  fn iter_intersecting<'a>(&'a self, sources: &'a FileSources, pos: SearchPosition) -> impl Iterator<Item = (NagaType, naga::Span)> {
     self.iter()
       .map(|(item, span)| {
         if let NagaType::FunctionExpression(func, expr) = item {
@@ -94,7 +96,8 @@ impl Module {
         (item, span, sources.span_source(&span))
       })
       .filter(|(.., source)| source.is_some())
-      .filter(|(item, span, source)| {
+      .filter(move |(item, span, source)| {
+        let inner = pos.inner; 
         let source = source.unwrap();
         let source_prefix = &source[..span.start as usize];
         let source_span = &source[span.start as usize..span.end as usize];
@@ -106,20 +109,20 @@ impl Module {
         let end_char = source_end[source_end.rfind('\n').unwrap_or(0)..].chars().count() as u32 - 1; 
 
         if let NagaType::FunctionExpression(_, expr) = item {
-          eprintln!("{:?}:{:?}-{:?}:{:?} {:?}:{:?} {:?}", line_start, start_char, line_end, end_char, position.line, position.character, expr); 
+          eprintln!("{:?}:{:?}-{:?}:{:?} {:?}:{:?} {:?}", line_start, start_char, line_end, end_char, inner.line, inner.character, expr); 
         }
 
-        line_start <= position.line &&
-          line_end >= position.line &&
-          start_char <= position.character &&
-          end_char >= position.character
+        line_start <= inner.line &&
+          line_end >= inner.line &&
+          start_char <= inner.character &&
+          end_char >= inner.character
       })
       .map(|(item, span, _)| (item, span))
   }
 
-  pub fn find_at<'a>(&'a self, sources: &'a FileSources, position: &'a Position, id: FileId) -> Option<(NagaType, naga::Span)> {
-    let out = self.iter_intersecting(sources, position)
-      .filter(|(_, span)| span.file_id == Some(id))
+  pub fn find_at<'a>(&'a self, sources: &'a FileSources, pos: SearchPosition) -> Option<(NagaType, naga::Span)> {
+    let out = self.iter_intersecting(sources, pos)
+      .filter(|(_, span)| span.file_id == Some(pos.file_id))
       .reduce(|prev, item| {
         let (_, span) = prev;
         let (_, next_span) = item; 
@@ -136,22 +139,14 @@ impl Module {
     out
   }
 
-  pub fn find_span_at(&self, sources: &FileSources, position: &Position, id: FileId) -> Option<naga::Span> {
-    let (naga_type, span) = self.find_at(sources, position, id)?;
+  // pub fn find_definition_at(&self, sources: &FileSources, pos: SearchPosition) -> self::Definition {
+  // }
+
+  pub fn find_span_at(&self, sources: &FileSources, pos: SearchPosition) -> Option<naga::Span> {
+    let (naga_type, span) = self.find_at(sources, pos)?;
     let module = &self.inner; 
-
-    eprintln!("call goto_span {:#?}", naga_type);
-
-    let file = sources.get(span.file_id?)?;
-    let source = file.source();
-    let line_offset = if position.line > 0 {
-      source.match_indices('\n').nth(position.line as usize - 1)?.0
-    }
-    else {
-      0
-    }; 
-
-    let position_start = line_offset + position.character as usize + 1; // + 1 to skip over newline
+    let source = sources.source(pos.file_id).unwrap();
+    let position_start = pos.start(sources); 
 
     match naga_type {
       NagaType::FunctionArgumentType(handle) => Some(module.types.get_span(handle)),
@@ -230,20 +225,11 @@ impl Module {
     }
   }
 
-  pub fn find_type_at(&self, sources: &FileSources, position: &Position, id: FileId) -> Option<&naga::Type> {
-    let (item, span) = self.find_at(sources, position, id)?;
+  pub fn find_type_at(&self, sources: &FileSources, pos: SearchPosition) -> Option<&naga::Type> {
+    let (item, span) = self.find_at(sources, pos)?;
     let module = &self.inner; 
-    
-    let file = sources.get(span.file_id?)?;
-    let source = file.source();
-    let line_offset = if position.line > 0 {
-      source.match_indices('\n').nth(position.line as usize - 1)?.0
-    }
-    else {
-      0
-    }; 
-    
-    let position_start = line_offset + position.character as usize + 1; // + 1 to skip over newline
+    let source = sources.source(pos.file_id).unwrap();
+    let position_start = pos.start(sources); 
 
     let ty = match item {
       NagaType::Global(naga::GlobalVariable { ty, .. }) => Some(&module.types[*ty]),

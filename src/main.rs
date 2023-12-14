@@ -1,7 +1,8 @@
 use std::path::{Path};
 pub use file_sources::FileSources;
 use module::Module;
-use naga::front::wgsl::source_provider::{FileId, SourceProvider};
+use module::search_position::SearchPosition;
+use naga::front::wgsl::source_provider::{SourceProvider};
 use tower_lsp::{lsp_types::*, jsonrpc};
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
@@ -16,9 +17,9 @@ mod module;
 
 impl WgslxLanguageServer {
 
-  fn do_hover(&self, sources: &FileSources, position: &Position, id: FileId) -> Option<Hover> {
-    let module = Module::from(sources, id).ok()?;
-    let ty = module.find_type_at(sources, position, id)?;
+  fn do_hover(&self, sources: &FileSources, pos: SearchPosition) -> Option<Hover> {
+    let module = Module::from(sources, pos.file_id).ok()?;
+    let ty = module.find_type_at(sources, pos)?;
     let contents = format!("{:?}", ty.inner);
     let hover = Hover {
       contents: HoverContents::Scalar(MarkedString::String(contents)),
@@ -28,9 +29,11 @@ impl WgslxLanguageServer {
     Some(hover)
   }
 
-  fn goto(&self, sources: &FileSources, position: &Position, id: FileId) -> Option<GotoDefinitionResponse> {
-    let module = Module::from(sources, id).ok()?;
-    let span = module.find_span_at(sources, position, id)?;
+  fn goto(&self, sources: &FileSources, pos: SearchPosition) -> Option<GotoDefinitionResponse> {
+    let module = Module::from(sources, pos.file_id).ok()?;
+    let span = module.find_span_at(sources, pos)?;
+
+    eprintln!("Got span {:?}", span); 
 
     // We may get back an empty span, created with Span::default(), e.g., in the case of a standard type
     // being returned from the types Arena
@@ -99,8 +102,8 @@ impl LanguageServer for WgslxLanguageServer {
     let uri = params.text_document_position_params.text_document.uri; 
     let sources = file_sources::FileSources::new();
     let id = sources.visit(Path::new(uri.path())).unwrap();
-    let position = params.text_document_position_params.position;
-    let hover = self.do_hover(&sources, &position, id);
+    let pos = SearchPosition::new(params.text_document_position_params.position, id);
+    let hover = self.do_hover(&sources, pos);
 
     Ok(hover)
   }
@@ -109,10 +112,10 @@ impl LanguageServer for WgslxLanguageServer {
     self.client.log_message(MessageType::INFO, format!("Request definition! {:#?}", params)).await;
 
     let uri = params.text_document_position_params.text_document.uri; 
-    let sources = file_sources::FileSources::new();
-    let id = sources.visit(Path::new(uri.path())).unwrap();
-    let position = params.text_document_position_params.position;
-    let response = self.goto(&sources, &position, id);
+    let sources = FileSources::new();
+    let id = sources.visit(uri.path()).unwrap();
+    let pos = SearchPosition::new(params.text_document_position_params.position, id);
+    let response = self.goto(&sources, pos);
     
     Ok(response)
   }
@@ -124,7 +127,7 @@ impl LanguageServer for WgslxLanguageServer {
   async fn did_change(&self, params: DidChangeTextDocumentParams) {
     self.client.log_message(MessageType::INFO, format!("changed! {}", params.text_document.uri)).await;
 
-    let mut sources = file_sources::FileSources::new();
+    let mut sources = FileSources::new();
     let id = sources.insert(params.text_document.uri.path(), &params.content_changes[0].text);
     let diagnostics = Module::diagnostics(&sources, id)
       .into_iter()

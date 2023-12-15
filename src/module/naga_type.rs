@@ -10,6 +10,7 @@ pub enum NagaType<'a> {
   FunctionResult(&'a naga::Function, &'a naga::FunctionResult),
   FunctionNamedExpression(&'a naga::NamedExpression),
   FunctionArgumentType(naga::Handle<naga::Type>),
+  FunctionNamedUse(&'a naga::Function, &'a naga::NamedExpressionUse),
   Type(&'a naga::Type),
   Statment(&'a naga::Statement),
 }

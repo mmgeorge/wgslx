@@ -31,7 +31,8 @@ impl WgslxLanguageServer {
 
   fn goto(&self, sources: &FileSources, pos: SearchPosition) -> Option<GotoDefinitionResponse> {
     let module = Module::from(sources, pos.file_id).ok()?;
-    let span = module.find_span_at(sources, pos)?;
+    let definition = module.find_definition_at(sources, pos)?;
+    let span = definition.get_span(&module); //module.find_span_at(sources, pos)?;
 
     eprintln!("Got span {:?}", span); 
 
@@ -102,7 +103,7 @@ impl LanguageServer for WgslxLanguageServer {
     let uri = params.text_document_position_params.text_document.uri; 
     let sources = file_sources::FileSources::new();
     let id = sources.visit(Path::new(uri.path())).unwrap();
-    let pos = SearchPosition::new(params.text_document_position_params.position, id);
+    let pos = SearchPosition::new(&sources, params.text_document_position_params.position, id);
     let hover = self.do_hover(&sources, pos);
 
     Ok(hover)
@@ -114,7 +115,7 @@ impl LanguageServer for WgslxLanguageServer {
     let uri = params.text_document_position_params.text_document.uri; 
     let sources = FileSources::new();
     let id = sources.visit(uri.path()).unwrap();
-    let pos = SearchPosition::new(params.text_document_position_params.position, id);
+    let pos = SearchPosition::new(&sources, params.text_document_position_params.position, id);
     let response = self.goto(&sources, pos);
     
     Ok(response)

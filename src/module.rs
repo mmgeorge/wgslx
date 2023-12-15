@@ -1,4 +1,4 @@
-use naga::{front::wgsl::{source_provider::{FileId, SourceProvider, Files}, parse_module}, valid::{Validator, Capabilities, ValidationFlags}};
+use naga::{front::wgsl::{source_provider::{FileId, SourceProvider, Files}, parse_module}, valid::{Validator, Capabilities, ValidationFlags}, Function};
 use crate::file_sources::FileSources;
 
 use self::{error::Error, naga_type::NagaType, diagnostic::Diagnostic, search_position::SearchPosition, definition::Definition};
@@ -59,6 +59,9 @@ impl Module {
 
     let function_named_exprs =  module.functions.iter()
       .flat_map(|(_, func)| func.named_expressions.values().map(|expr| (NagaType::FunctionNamedExpression(expr), expr.span)));
+    let function_named_uses =  module.functions.iter()
+      .flat_map(|(_, func)| Self::arena_iter(&func.named_uses).map(|(expr, span)| (NagaType::FunctionNamedUse(func, expr), span)));
+    
     let function_locals =  module.functions.iter()
       .flat_map(|(_, func)| Self::arena_iter(&func.local_variables))
       .map(|(item, span)| (NagaType::Local(item), span)); 
@@ -81,11 +84,33 @@ impl Module {
       .chain(functions)
       .chain(function_exprs)
       .chain(function_named_exprs)
+      .chain(function_named_uses)
       .chain(function_locals)
       .chain(function_body)
       .chain(function_args)
       .chain(function_result)
   }
+
+  fn find_closest_at<T>(arena: &naga::Arena<T>, pos: SearchPosition) -> Option<&T> {
+    let item = arena.iter()
+      .map(|(handle, item)| (item, arena.get_span(handle)))
+      .filter(move |(_item, span)| pos.inside(span))
+      .reduce(|prev, item| {
+        let (_, span) = prev;
+        let (_, next_span) = item; 
+        let prev_size = span.end - span.start; 
+        let size = next_span.end - next_span.start; 
+
+        if size < prev_size {
+          item
+        } else {
+          prev
+        }
+      });
+
+    item.map(|item| item.0)
+  }
+  
 
   fn iter_intersecting<'a>(&'a self, sources: &'a FileSources, pos: SearchPosition) -> impl Iterator<Item = (NagaType, naga::Span)> {
     self.iter()
@@ -97,25 +122,7 @@ impl Module {
       })
       .filter(|(.., source)| source.is_some())
       .filter(move |(item, span, source)| {
-        let inner = pos.inner; 
-        let source = source.unwrap();
-        let source_prefix = &source[..span.start as usize];
-        let source_span = &source[span.start as usize..span.end as usize];
-        let source_end = &source[..span.end as usize];
-
-        let line_start = source_prefix.matches('\n').count() as u32;
-        let line_end = line_start + source_span.matches('\n').count() as u32;
-        let start_char = source_prefix[source_prefix.rfind('\n').unwrap_or(0)..].chars().count() as u32 - 1; 
-        let end_char = source_end[source_end.rfind('\n').unwrap_or(0)..].chars().count() as u32 - 1; 
-
-        if let NagaType::FunctionExpression(_, expr) = item {
-          eprintln!("{:?}:{:?}-{:?}:{:?} {:?}:{:?} {:?}", line_start, start_char, line_end, end_char, inner.line, inner.character, expr); 
-        }
-
-        line_start <= inner.line &&
-          line_end >= inner.line &&
-          start_char <= inner.character &&
-          end_char >= inner.character
+        pos.location >= span.start as usize && pos.location <= span.end as usize
       })
       .map(|(item, span, _)| (item, span))
   }
@@ -139,16 +146,50 @@ impl Module {
     out
   }
 
-  // pub fn find_definition_at(&self, sources: &FileSources, pos: SearchPosition) -> self::Definition {
-  // }
+  pub fn find_definition_at<'a>(&'a self, sources: &'a FileSources, pos: SearchPosition) -> Option<Definition<'a>> {
+    // First check expressions at the module level
+    if let Some(expr) = Self::find_closest_at(&self.inner.const_expressions, pos) {
+      return Definition::try_from_expression(&self.inner, None, &expr)
+    }
+
+    // Otherwise descend into the function that intersects the span 
+    if let Some(func) = Self::find_closest_at(&self.inner.functions, pos) {
+      return self.find_definition_at_function(sources, pos, func)
+    }
+
+    None
+  }
+
+  pub fn find_definition_at_function<'a>(&'a self, sources: &'a FileSources, pos: SearchPosition, func: &'a naga::Function) -> Option<Definition<'a>> {
+    // Check named uses
+    if let Some(named_use) = Self::find_closest_at(&func.named_uses, pos) {
+      return Definition::try_from_named_use(Some(func), named_use)
+    }
+    
+    if let Some(expr) = Self::find_closest_at(&func.expressions, pos) {
+      return Definition::try_from_expression(&self.inner, Some(func), &expr)
+    }
+
+    // // Otherwise descend into the function that intersects the span 
+    // if let Some(func) = Self::find_closest_at(&self.inner.functions, pos) {
+    //   return self.find_definition_at_function(&self, sources: &FileSources, pos: SearchPosition)
+    // }
+
+    None
+  }
+  
 
   pub fn find_span_at(&self, sources: &FileSources, pos: SearchPosition) -> Option<naga::Span> {
     let (naga_type, span) = self.find_at(sources, pos)?;
     let module = &self.inner; 
     let source = sources.source(pos.file_id).unwrap();
-    let position_start = pos.start(sources); 
+    let position_start = pos.location; 
+
+      eprintln!("find_span_at ty: {:#?}", naga_type); 
 
     match naga_type {
+      NagaType::FunctionNamedUse(func, naga::NamedExpressionUse { expression } )
+        => Some(func.expressions.get_span(*expression)),
       NagaType::FunctionArgumentType(handle) => Some(module.types.get_span(handle)),
       NagaType::FunctionResult(_, naga::FunctionResult { ty, .. }) => Some(module.types.get_span(*ty)),
       NagaType::FunctionExpression(_, naga::Expression::GlobalVariable(handle)) => Some(module.global_variables.get_span(*handle)),
@@ -165,10 +206,12 @@ impl Module {
         }
 
         // Otherwise, we are within the compose. Jump to closest index definition 
-        let index = substr.matches(',').count();
-        let component = components[index];
+        // let index = substr.matches(',').count();
+        // let component = components[index];
 
-        Some(func.expressions.get_span(component))
+        // Some(func.expressions.get_span(component))
+
+        None
       },
       NagaType::FunctionExpression(func, naga::Expression::Load { pointer }) => {
         match &func.expressions[*pointer] {
@@ -229,7 +272,7 @@ impl Module {
     let (item, span) = self.find_at(sources, pos)?;
     let module = &self.inner; 
     let source = sources.source(pos.file_id).unwrap();
-    let position_start = pos.start(sources); 
+    let location = pos.location; 
 
     let ty = match item {
       NagaType::Global(naga::GlobalVariable { ty, .. }) => Some(&module.types[*ty]),
@@ -239,7 +282,7 @@ impl Module {
       NagaType::FunctionExpression(func, naga::Expression::Compose { components, ty }) => {
         // We can only wind up here if we are pointing directly to a named expression. Otherwise we have a
         // load of some variable, or an accessor, which have their own spans and would have taken priority.
-        let substr = &source[span.start as usize..position_start + 1]; // +1 for inclusive range
+        let substr = &source[span.start as usize..location + 1]; // +1 for inclusive range
 
         // If we are left of the paren, jump to the type we are composing
         if substr.rfind('(').is_none() {

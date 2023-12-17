@@ -23,7 +23,6 @@ impl From<naga::WithSpan<naga::valid::ValidationError>> for Error {
 
 impl From<Error> for Vec<Diagnostic> {
   fn from(val: Error) -> Self {
-    eprintln!("got error {:#?}", val); 
     let mut out = Vec::new();
 
     match val {
@@ -49,6 +48,7 @@ impl From<Error> for Vec<Diagnostic> {
         }
       }
       Error::Validation(error) => {
+        eprintln!("Got validation error {:#?}", error); 
         // Naga validation errors include a vector of spans (with labels, such as "naga::Expression [8]")
         // for marking code, as well as the actual error message which to view in it's entirety requires traversing
         // errors sources
@@ -61,6 +61,7 @@ impl From<Error> for Vec<Diagnostic> {
         // 
         // We ignore everything but the inner error, and associate it with the last span
         if let Some((span, _label)) = error.spans().last() {
+          eprintln!("Found error in {:#?}", span); 
           // Get the most inner error
           let mut source: &dyn std::error::Error = &error.as_inner();
           while let Some(next) = std::error::Error::source(source) {

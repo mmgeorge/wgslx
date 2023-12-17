@@ -33,7 +33,7 @@ impl Module {
       return error.into(); 
     }
 
-    return vec![]
+    vec![]
   }
 
   fn validate(provider: &FileSources, id: FileId) -> Result<(), Error> {
@@ -84,7 +84,7 @@ impl Module {
     None
   }
 
-  pub fn find_declaration_at<'a>(&'a self, sources: &'a FileSources, pos: SearchPosition) -> Option<Definition<'a>> {
+  pub fn find_hoverable_at<'a>(&'a self, sources: &'a FileSources, pos: SearchPosition) -> Option<Definition<'a>> {
     if let Some((handle, ..)) = Self::find_closest_at(&self.inner.global_variables, pos) {
       return Some(Definition::GlobalVariable(handle))
     }
@@ -95,7 +95,7 @@ impl Module {
 
     // Otherwise descend into the function that intersects the span 
     if let Some((.., func)) = Self::find_closest_at(&self.inner.functions, pos) {
-      return self.find_declaration_at_function(sources, pos, func)
+      return self.find_hoverable_at_function(sources, pos, func)
     }
 
     None
@@ -136,12 +136,7 @@ impl Module {
     None
   }
 
-  pub fn find_declaration_at_function<'a>(&'a self, sources: &'a FileSources, pos: SearchPosition, func: &'a naga::Function) -> Option<Definition<'a>> {
-    // Check named uses
-    // if let Some((.., named_use)) = Self::find_closest_at(&func.named_uses, pos) {
-      // return Definition::try_from_named_use(Some(func), named_use)
-    // }
-
+  pub fn find_hoverable_at_function<'a>(&'a self, sources: &'a FileSources, pos: SearchPosition, func: &'a naga::Function) -> Option<Definition<'a>> {
     if let Some((handle, ..)) = Self::find_closest_at(&func.local_variables, pos) {
       eprintln!("Got local var!"); 
       return Some(Definition::LocalVariable(func, handle))
@@ -151,7 +146,8 @@ impl Module {
       return Some(Definition::LocalNamedExpression(func, handle))
     }
 
-    None
+    self.find_definition_at_function(sources, pos, func)
+    // None
   }
 
   pub fn find_closest_named_expression_at<'a>(sources: &'a FileSources, pos: SearchPosition, func: &'a naga::Function) -> Option<(naga::Handle<Expression>, &'a NamedExpression)> {

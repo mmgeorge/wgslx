@@ -21,11 +21,8 @@ impl WgslxLanguageServer {
 
   fn do_hover(&self, sources: &FileSources, pos: SearchPosition) -> Option<Hover> {
     let module = Module::from(sources, pos.file_id).ok()?;
-    let definition = module.find_declaration_at(sources, pos)?;
-    let ty_handle = definition.get_type(module.as_inner());
-    let ty = &module.as_inner().types[ty_handle]; 
-    
-    let contents = format_type(module.as_inner(), ty); 
+    let hoverable = module.find_hoverable_at(sources, pos)?;
+    let contents = hoverable.get_hoverable_text(module.as_inner()); 
     let hover = Hover {
       contents: HoverContents::Scalar(MarkedString::String(contents)),
       range: None

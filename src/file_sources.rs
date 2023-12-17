@@ -8,10 +8,12 @@ use std::path::PathBuf;
 use std::collections::HashMap;
 use std::cell::UnsafeCell;
 
+#[derive(Debug)]
 pub struct FileSources {
   pub(crate) inner: UnsafeCell::<FileSourcesInner>
 }
 
+#[derive(Debug)]
 pub struct FileSourcesInner {
   pub ids: HashMap<PathBuf, Option<FileId>>, 
   pub files: HashMap<FileId, File>,
@@ -26,7 +28,7 @@ impl FileSourcesInner {
         self.counter += 1;
         eprintln!("Read file {}", path.to_string_lossy()); 
         let source = fs::read_to_string(&path).expect("got value"); 
-        eprintln!("got file {}", path.to_string_lossy()); 
+        eprintln!("got file id={} {}", self.counter, path.to_string_lossy()); 
         self.files.insert(
           self.counter,
           File::new(self.counter, path, source)); 

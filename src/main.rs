@@ -1,6 +1,8 @@
 use std::path::{Path};
 pub use file_sources::FileSources;
 use module::Module;
+use module::definition::Definition;
+use module::format::format_type;
 use module::search_position::SearchPosition;
 use naga::front::wgsl::source_provider::{SourceProvider};
 use tower_lsp::{lsp_types::*, jsonrpc};
@@ -19,8 +21,11 @@ impl WgslxLanguageServer {
 
   fn do_hover(&self, sources: &FileSources, pos: SearchPosition) -> Option<Hover> {
     let module = Module::from(sources, pos.file_id).ok()?;
-    let ty = module.find_type_at(sources, pos)?;
-    let contents = format!("{:?}", ty.inner);
+    let definition = module.find_declaration_at(sources, pos)?;
+    let ty_handle = definition.get_type(module.as_inner());
+    let ty = &module.as_inner().types[ty_handle]; 
+    
+    let contents = format_type(module.as_inner(), ty); 
     let hover = Hover {
       contents: HoverContents::Scalar(MarkedString::String(contents)),
       range: None

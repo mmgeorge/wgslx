@@ -160,6 +160,16 @@ impl Module {
     None
   }
 
+  pub fn find_definition_at_function_result<'a>(&'a self, sources: &'a FileSources, pos: SearchPosition, func: &'a naga::Function) -> Option<Definition<'a>> {
+    let result = &func.result.clone()?;
+
+    if pos.inside(&result.ty_span) {
+      return Some(Definition::Type(result.ty)); 
+    }
+
+    None
+  }
+
   pub fn find_definition_at_function<'a>(&'a self, sources: &'a FileSources, pos: SearchPosition, func: &'a naga::Function) -> Option<Definition<'a>> {
     // Check named uses
     if let Some(named_use) = Self::find_closest_at(&func.named_uses, pos) {
@@ -167,12 +177,12 @@ impl Module {
     }
 
     // Check if we are on the function result type
-    if let Some(result) = &func.result {
-      return Some(Definition::Type(result.ty)); 
+    if let Some(result) = self.find_definition_at_function_result(sources, pos, func) {
+      return Some(result); 
     }
     
     if let Some(expr) = Self::find_closest_at(&func.expressions, pos) {
-      return Definition::try_from_expression(&self.inner, Some(func), &expr, false)
+      return Definition::try_from_expression(&self.inner, Some(func), expr, false)
     }
 
     // // Otherwise descend into the function that intersects the span 

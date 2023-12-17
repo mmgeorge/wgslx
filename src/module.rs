@@ -165,6 +165,11 @@ impl Module {
     if let Some(named_use) = Self::find_closest_at(&func.named_uses, pos) {
       return Definition::try_from_named_use(Some(func), named_use)
     }
+
+    // Check if we are on the function result type
+    if let Some(result) = &func.result {
+      return Some(Definition::Type(result.ty)); 
+    }
     
     if let Some(expr) = Self::find_closest_at(&func.expressions, pos) {
       return Definition::try_from_expression(&self.inner, Some(func), &expr, false)

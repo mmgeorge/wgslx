@@ -149,7 +149,7 @@ impl Module {
   pub fn find_definition_at<'a>(&'a self, sources: &'a FileSources, pos: SearchPosition) -> Option<Definition<'a>> {
     // First check expressions at the module level
     if let Some(expr) = Self::find_closest_at(&self.inner.const_expressions, pos) {
-      return Definition::try_from_expression(&self.inner, None, &expr)
+      return Definition::try_from_expression(&self.inner, None, &expr, false)
     }
 
     // Otherwise descend into the function that intersects the span 
@@ -167,7 +167,7 @@ impl Module {
     }
     
     if let Some(expr) = Self::find_closest_at(&func.expressions, pos) {
-      return Definition::try_from_expression(&self.inner, Some(func), &expr)
+      return Definition::try_from_expression(&self.inner, Some(func), &expr, false)
     }
 
     // // Otherwise descend into the function that intersects the span 

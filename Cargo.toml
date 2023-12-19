@@ -6,6 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-naga = { path = "../wgslx-wgpu/naga",  features = ["wgsl-in", "wgsl-out"] }
+naga = { path = "../wgslx-wgpu/naga",  features = ["wgsl-in", "wgsl-out", "clone"] }
 tokio = { version = "1.34.0", features = ["full"] }
 tower-lsp = "0.20.0"

@@ -26,9 +26,7 @@ impl FileSourcesInner {
     let entry = self.ids.entry(path.clone())
       .or_insert_with(|| {
         self.counter += 1;
-        eprintln!("Read file {}", path.to_string_lossy()); 
-        let source = fs::read_to_string(&path).expect("got value"); 
-        eprintln!("got file id={} {}", self.counter, path.to_string_lossy()); 
+        let source = fs::read_to_string(&path).expect("Unable to read file"); 
         self.files.insert(
           self.counter,
           File::new(self.counter, path, source)); 
@@ -41,6 +39,17 @@ impl FileSourcesInner {
   pub fn insert(&mut self, path: PathBuf, source: String) -> FileId {
     let id = self.ensure(path).unwrap();
     let file = self.files.get_mut(&id).unwrap();
+
+    file.source = source;
+
+    id
+  }
+
+  pub fn update(&mut self, path: PathBuf) -> FileId {
+    let id = self.ensure(&path).unwrap();
+    let file = self.files.get_mut(&id).unwrap();
+    let source = fs::read_to_string(&path)
+      .expect("Unable to read string"); 
 
     file.source = source;
 
@@ -61,8 +70,20 @@ impl FileSources {
 }
 
 impl FileSources {
-  pub fn insert(&mut self, path: impl AsRef<Path>, source: &str) -> FileId {
-    self.inner.get_mut().insert(path.as_ref().to_owned(), source.to_owned())
+  pub fn insert(&self, path: impl AsRef<Path>, source: &str) -> FileId {
+    unsafe {
+      let inner = &mut *self.inner.get();
+
+      inner.insert(path.as_ref().to_owned(), source.to_owned())
+    }
+  }
+
+  pub fn update(&self, path: impl AsRef<Path>) -> FileId {
+    unsafe {
+      let inner = &mut *self.inner.get();
+
+      inner.update(path.as_ref().to_owned())
+    }
   }
 
   pub fn span_source(&self, span: &naga::Span) -> Option<&str> {

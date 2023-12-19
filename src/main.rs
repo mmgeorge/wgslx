@@ -1,8 +1,7 @@
 use std::path::{Path};
 use change_state::ChangeState;
-use completion::{find_completion_type_at};
 pub use file_sources::FileSources;
-use module::{Module, diagnostic};
+use module::{Module};
 use module::search_position::SearchPosition;
 use naga::front::wgsl::source_provider::{SourceProvider};
 use tower_lsp::{lsp_types::*, jsonrpc};
@@ -24,7 +23,6 @@ unsafe impl Sync for WgslxLanguageServer {}
 
 mod file_sources;
 mod module;
-mod completion;
 
 
 impl WgslxLanguageServer {

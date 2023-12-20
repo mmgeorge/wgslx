@@ -117,12 +117,11 @@ impl Module {
     // Get completion type
     let source = changed.source(pos_changed.file_id).unwrap();
     let substr = &source[..pos_changed.location];
-    let index = substr.rfind(&['<', '>', ';', '(', '=', '.', '"'])?;
+    let index = substr.rfind(&['<', '>', ';', ':', '(', '=', '.', '"'])?;
     let character = substr.chars().nth(index)?;
     let completion_type = match character {
       // TODO: Should limit to only f32, i32, u32?
-      '<' => CompletionType::TypeDefinition,
-      '>' => CompletionType::TypeDefinition,
+      '<' | '>' | ':' => CompletionType::TypeDefinition,
       ';' | '(' => CompletionType::Definition,
       '=' => {
         // The only case in which an '=' should yield a type definition, is if two tokens priror
@@ -267,7 +266,7 @@ impl Module {
       .map(|(_, var)| {
         let ty_str = format_type(&self.inner, &self.inner.types[var.ty]);
 
-        CompletionCandiate::new(var.name.clone().unwrap(), ty_str, CompletionKind::Variable)
+        CompletionCandiate::new(var.name.clone().unwrap(), ty_str, CompletionKind::Constant)
       });
 
     let types = self.inner.types.iter()

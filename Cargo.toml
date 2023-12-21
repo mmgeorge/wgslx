@@ -17,7 +17,6 @@ path = "crates/wgslx-wgpu/naga"
 version = "0.14.0"
 
 [dependencies]
-# naga = { path = "../wgslx-wgpu/naga",  features = ["wgsl-in", "wgsl-out", "clone"] }
-naga = { workspace = true, features = ["wgsl-in", "wgsl-out", "clone", "spv-in", "spv-out", "glsl-in", "glsl-out"] }
+naga = { workspace = true, features = ["wgsl-in", "wgsl-out", "clone", "glsl-in", "glsl-out", "spv-in", "spv-out", "serialize", "deserialize"] }
 tokio = { version = "1.34.0", features = ["full"] }
 tower-lsp = "0.20.0"

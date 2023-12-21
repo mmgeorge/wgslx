@@ -1,10 +1,9 @@
-use naga::{front::wgsl::{source_provider::{FileId, SourceProvider, Files}, parse_module}, valid::{Validator, Capabilities, ValidationFlags}, Function, Type, NamedExpression, Expression, TypeInner};
+use naga::{front::wgsl::{source_provider::{FileId, Files}, parse_module}, valid::{Validator, Capabilities, ValidationFlags}, NamedExpression, Expression, TypeInner};
 use crate::{file_sources::FileSources, module::format::format_type};
 
-use self::{error::Error, naga_type::NagaType, diagnostic::Diagnostic, search_position::SearchPosition, definition::Definition, completion_canditate::{CompletionCandiate, CompletionKind}, format::format_function_definition};
+use self::{error::Error, diagnostic::Diagnostic, search_position::SearchPosition, definition::Definition, completion_canditate::{CompletionCandiate, CompletionKind}, format::format_function_definition};
 
 pub mod error;
-pub mod naga_type;
 pub mod diagnostic;
 pub mod search_position;
 

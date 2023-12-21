@@ -24,7 +24,6 @@ unsafe impl Sync for WgslxLanguageServer {}
 mod file_sources;
 mod module;
 
-
 impl WgslxLanguageServer {
 
   fn do_goto(&self, pos: SearchPosition) -> Option<GotoDefinitionResponse> {

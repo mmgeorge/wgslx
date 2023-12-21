@@ -1,4 +1,4 @@
-use naga::{StorageAccess, Interpolation, Function};
+use naga::{StorageAccess, Interpolation};
 
 fn format_scalar(scalar: naga::Scalar) -> String {
   let bits = scalar.width * 8;
@@ -22,8 +22,7 @@ fn format_address_space(space: naga::AddressSpace) -> String {
     naga::AddressSpace::Storage { access } => match access {
       StorageAccess::LOAD =>  "storage<r>".to_string(),
       StorageAccess::STORE =>  "storage<w>".to_string(),
-      StorageAccess::LOAD | StorageAccess::STORE => "storage<rw>".to_string(),
-      _ => panic!("InternalError: Unable to handle unknown storage type")
+      _ => panic!("InternalError: Unable to handle unknown storage access type {:?}", access)
     },
     naga::AddressSpace::Handle => "handle".to_string(),
     naga::AddressSpace::PushConstant => "push_constant".to_string(),
@@ -136,7 +135,7 @@ pub fn format_type(module: &naga::Module, ty: &naga::Type) -> String {
 
       format!("ptr<{}, {}>", space_str, scalar_str)
     }
-    naga::TypeInner::Array { base, size, stride } => {
+    naga::TypeInner::Array { base, size, .. } => {
       let base_str = format_type(module, &module.types[*base]);
 
       match size {
@@ -195,7 +194,7 @@ pub fn format_type(module: &naga::Module, ty: &naga::Type) -> String {
             naga::ImageDimension::Cube => format!("texture_depth{}_cube{}", multi_str, array_str),
           }
         },
-        naga::ImageClass::Storage { format, access } => match dim {
+        naga::ImageClass::Storage { .. } => match dim {
           naga::ImageDimension::D1 => format!("texture_storage_1d{}", array_str),
           naga::ImageDimension::D2 => format!("texture_storage_2d{}", array_str),
           naga::ImageDimension::D3 => format!("texture_storage_3d{}", array_str),

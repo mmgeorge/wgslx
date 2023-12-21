@@ -31,9 +31,4 @@ impl SearchPosition {
     // + 1 to skip over newline
     line_offset + pos.character as usize + 1
   }
-
-  pub fn as_inner(&self) -> &lsp_types::Position {
-    &self.inner
-  }
-  
 }

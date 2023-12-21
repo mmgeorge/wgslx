@@ -87,7 +87,7 @@ impl<'a> Definition<'a> {
 
         Definition::try_from_expression(module, func, expr, true)
       },
-      naga::Expression::Access { base, index } => {
+      naga::Expression::Access { base, .. } => {
         let expr = if let Some(func) = func {
           &func.expressions[*base]
         } else {
@@ -121,23 +121,23 @@ impl<'a> Definition<'a> {
 
         Some(Definition::FunctionArgument(func.unwrap(), arg.clone()))
       },
-      naga::Expression::ImageSample { image, sampler, gather, coordinate, array_index, offset, level, depth_ref } => None, 
-      naga::Expression::ImageLoad { image, coordinate, array_index, sample, level } => None, 
-      naga::Expression::ImageQuery { image, query } => None, 
-      naga::Expression::Unary { op, expr } => None,
-      naga::Expression::Binary { op, left, right } => None, 
-      naga::Expression::Select { condition, accept, reject } => None,
-      naga::Expression::Derivative { axis, ctrl, expr } => None, 
-      naga::Expression::Relational { fun, argument } => None, 
-      naga::Expression::Math { fun, arg, arg1, arg2, arg3 } => None, 
-      naga::Expression::As { expr, kind, convert } => None, 
-      naga::Expression::AtomicResult { ty, comparison } => Some(Definition::Type(*ty)),
+      naga::Expression::ImageSample { .. } => None, 
+      naga::Expression::ImageLoad { .. } => None, 
+      naga::Expression::ImageQuery { .. } => None, 
+      naga::Expression::Unary { .. } => None,
+      naga::Expression::Binary { .. } => None, 
+      naga::Expression::Select { .. } => None,
+      naga::Expression::Derivative { .. } => None, 
+      naga::Expression::Relational { .. } => None, 
+      naga::Expression::Math { .. } => None, 
+      naga::Expression::As { .. } => None, 
+      naga::Expression::AtomicResult { ty, .. } => Some(Definition::Type(*ty)),
       naga::Expression::WorkGroupUniformLoadResult { ty } => Some(Definition::Type(*ty)),
       naga::Expression::ArrayLength(_) => None,
       naga::Expression::Literal(_) => None,
       naga::Expression::ZeroValue(_) => None,
       naga::Expression::RayQueryProceedResult => todo!(),
-      naga::Expression::RayQueryGetIntersection { query, committed } => todo!(),
+      naga::Expression::RayQueryGetIntersection { .. } => todo!(),
     }
   }
 

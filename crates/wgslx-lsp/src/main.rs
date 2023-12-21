@@ -135,7 +135,7 @@ impl LanguageServer for WgslxLanguageServer {
     let diagnostics = Module::diagnostics(&self.sources_saved, id)
       .into_iter()
       .filter(|diagnostic| diagnostic.span.file_id == Some(id))
-      .map(|diagnostic| diagnostic.as_lsp(&self.sources_saved))
+      .map(|diagnostic| diagnostic.to_lsp(&self.sources_saved))
       .collect();
 
     self.client.publish_diagnostics(params.text_document.uri, diagnostics, None).await; 

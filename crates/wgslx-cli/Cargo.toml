@@ -7,6 +7,9 @@ description = "Wgslx shader translation command line tool"
 keywords = ["shader", "wgsl", "wgslx", "WebGPU", "WebGPU Shading Language"]
 license = "MIT OR Apache-2.0"
 
+[lib]
+name = "wgslx_cli"
+
 [[bin]]
 name = "wgslx"
 path = "src/bin/wgslx.rs"

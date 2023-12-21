@@ -1,0 +1,2 @@
+
+const RED = vec4f(1, 0, 0, 1); 

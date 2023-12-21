@@ -1,0 +1,9 @@
+
+struct VertexInput {
+  @builtin(vertex_index) index: u32, 
+  @location(0) position: vec3f, 
+};
+
+struct VertexOutput {
+  @builtin(position) clip_position: vec4f
+}; 

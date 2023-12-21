@@ -11,6 +11,11 @@ members = [
   "crates/wgslx-lsp", 
   "crates/wgslx-cli"
 ]
+default-members = [
+  "crates/wgslx-wgpu/naga",
+  "crates/wgslx-lsp", 
+  "crates/wgslx-cli"
+]
 
 [workspace.dependencies.naga]
 path = "crates/wgslx-wgpu/naga"

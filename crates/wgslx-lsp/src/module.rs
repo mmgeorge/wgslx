@@ -81,14 +81,34 @@ impl Module {
     item.map(|(handle, item, ..)| (handle, item))
   }
 
+  fn find_closest_entry_at(entries: &[naga::EntryPoint], pos: SearchPosition) -> Option<&naga::EntryPoint> {
+    entries.iter()
+      .filter(|entry| pos.inside(&entry.span))
+      .reduce(|prev, item| {
+        let span = prev.span;
+        let next_span = item.span; 
+        let prev_size = span.end - span.start; 
+        let size = next_span.end - next_span.start;
+
+        if size < prev_size {
+          item
+        } else {
+          prev
+        }
+      })
+  }
+
   pub fn find_definition_at<'a>(&'a self, sources: &'a FileSources, pos: SearchPosition) -> Option<Definition<'a>> {
     // First check expressions at the module level
     if let Some((.., expr)) = Self::find_closest_at(&self.inner.const_expressions, pos) {
-      return Definition::try_from_expression(&self.inner, None, &expr, false)
+      return Definition::try_from_expression(&self.inner, None, expr, false)
     }
 
+    let closest_func = Self::find_closest_at(&self.inner.functions, pos).map(|(.., func)| func)
+      .or_else(|| Self::find_closest_entry_at(&self.inner.entry_points, pos).map(|entry| &entry.function)); 
+
     // Otherwise descend into the function that intersects the span 
-    if let Some((.., func)) = Self::find_closest_at(&self.inner.functions, pos) {
+    if let Some(func) = closest_func {
       return self.find_definition_at_function(sources, pos, func)
     }
 
@@ -104,9 +124,14 @@ impl Module {
       return Some(Definition::Constant(handle))
     }
 
-    // Otherwise descend into the function that intersects the span 
+    // Descend into the functions that intersects the span 
     if let Some((.., func)) = Self::find_closest_at(&self.inner.functions, pos) {
       return self.find_hoverable_at_function(sources, pos, func)
+    }
+
+    // Otherwise descend into entry points
+    if let Some(entry) = Self::find_closest_entry_at(&self.inner.entry_points, pos) {
+      return self.find_hoverable_at_function(sources, pos, &entry.function)
     }
 
     None
@@ -116,7 +141,7 @@ impl Module {
     // Get completion type
     let source = changed.source(pos_changed.file_id).unwrap();
     let substr = &source[..pos_changed.location];
-    let index = substr.rfind(&['<', '>', ';', ':', '(', '=', '.', '"'])?;
+    let index = substr.rfind(&['<', '>', ';', ':', '(', '=', '.', '"', '@'])?;
     let character = substr.chars().nth(index)?;
     let completion_type = match character {
       // TODO: Should limit to only f32, i32, u32?
@@ -141,6 +166,18 @@ impl Module {
           "alias" => CompletionType::TypeDefinition,
           _ => CompletionType::Definition
         }
+      },
+      '@' => {
+        let at_types = vec![
+          "location", 
+          "builtin",
+          "vertex", 
+          "fragment"
+        ];
+
+        return Some(at_types.into_iter()
+          .map(|name| CompletionCandiate::new(name.to_string(), "[Native]".to_string(), CompletionKind::Type))
+          .collect()); 
       }, 
       '"' => CompletionType::ImportPath,
       '.' => {
@@ -166,8 +203,12 @@ impl Module {
     let constant = self.inner.constants.iter().find(|(_, var)| var.name.clone().unwrap() == token)
       .map(|(_, var)| var.ty);
 
+    let closest_func = Self::find_closest_at(&self.inner.functions, pos).map(|(.., func)| func)
+      .or_else(|| Self::find_closest_entry_at(&self.inner.entry_points, pos)
+               .map(|entry| &entry.function)); 
+      
     // First check if we are in a function, & prefer local delcarations firsts
-    if let Some((.., func)) = Self::find_closest_at(&self.inner.functions, pos) {
+    if let Some(func) = closest_func {
       let local_var = func.local_variables.iter()
         .find(|(_, var)| var.name.clone().unwrap() == token)
         .map(|(_, var)| var.ty);
@@ -279,7 +320,11 @@ impl Module {
         CompletionKind::Function
       ));
 
-    if let Some((.., func)) = Self::find_closest_at(&self.inner.functions, pos) {
+    let closest_func = Self::find_closest_at(&self.inner.functions, pos).map(|(.., func)| func)
+      .or_else(|| Self::find_closest_entry_at(&self.inner.entry_points, pos)
+               .map(|entry| &entry.function)); 
+
+    if let Some(func) = closest_func {
       let local_vars = func.local_variables.iter()
         .filter(|(handle, _)| func.local_variables.get_span(*handle).end <= pos.location as u32)
         .map(|(_, var)| {

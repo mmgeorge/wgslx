@@ -20,9 +20,9 @@ fn format_address_space(space: naga::AddressSpace) -> String {
     naga::AddressSpace::WorkGroup => "workgroup".to_string(),
     naga::AddressSpace::Uniform => "uniform".to_string(),
     naga::AddressSpace::Storage { access } => match access {
-      StorageAccess::LOAD =>  "storage<r>".to_string(),
-      StorageAccess::STORE =>  "storage<w>".to_string(),
-      _ => panic!("InternalError: Unable to handle unknown storage access type {:?}", access)
+      StorageAccess::LOAD =>  "storage<read>".to_string(),
+      StorageAccess::STORE =>  "storage<write>".to_string(),
+      _ =>  "storage<read_write>".to_string(),
     },
     naga::AddressSpace::Handle => "handle".to_string(),
     naga::AddressSpace::PushConstant => "push_constant".to_string(),

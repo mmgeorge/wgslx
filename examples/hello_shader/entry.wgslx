@@ -1,4 +1,5 @@
 
+
 @import "types.wgslx"
 @import "constants.wgslx"
 
@@ -18,8 +19,25 @@ fn vs_main(input: VertexInput) -> VertexOutput {
   return out; 
 }
 
+@vertex
+fn vs_main2(input: VertexInput3) -> VertexOutput {
+  var pos = array<vec2f, 3>
+    (
+     vec2(0.0, 0.5),
+     vec2(-0.5, -0.5),
+     vec2(0.5, -0.5)
+    );
+ 
+  var out: VertexOutput;
+
+  out.clip_position = vec4f(pos[input.index], 0., 1.); 
+  
+  return out; 
+}
+
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-  return RED; 
+  return transforms2[0][0] + transforms[0][0];
+  // return RED; 
 }

@@ -9,12 +9,14 @@ edition = "2021"
 members = [
   "crates/wgslx-wgpu/naga",
   "crates/wgslx-lsp", 
-  "crates/wgslx-cli"
+  "crates/wgslx-cli", 
+  "crates/wgslx-bindgen"
 ]
 default-members = [
   "crates/wgslx-wgpu/naga",
   "crates/wgslx-lsp", 
-  "crates/wgslx-cli"
+  "crates/wgslx-cli", 
+  "crates/wgslx-bindgen"
 ]
 
 [workspace.dependencies.naga]

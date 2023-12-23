@@ -1,0 +1,7 @@
+[package]
+name = "wgslx-bindgen"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+naga = { package = "naga", path = "../wgslx-wgpu/naga", features = ["wgsl-in", "wgsl-out", "clone"] }

@@ -1,4 +1,10 @@
 
+// Something like this in the future...? 
+// group ViewState {
+  // @storage transforms: array<mat4x4<f32>>
+  // @storage transforms2: array<mat4x4<f32>>
+// }
+
 @group(0) @binding(0) var<storage> transforms: array<mat4x4<f32>>;
 @group(0) @binding(0) var<storage> transforms2: array<mat4x4<f32>>; 
 

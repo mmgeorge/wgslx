@@ -10,17 +10,20 @@ members = [
   "crates/wgslx-wgpu/naga",
   "crates/wgslx-lsp", 
   "crates/wgslx-cli", 
-  "crates/wgslx-bindgen"
+  "crates/wgslx-bindgen",
+  "crates/wgslx-compiler"
 ]
 default-members = [
   "crates/wgslx-wgpu/naga",
   "crates/wgslx-lsp", 
   "crates/wgslx-cli", 
-  "crates/wgslx-bindgen"
+  "crates/wgslx-bindgen", 
+  "crates/wgslx-compiler"
 ]
 
 [workspace.dependencies.naga]
 path = "crates/wgslx-wgpu/naga"
 
 [dependencies]
+compiler = { package = "wgslx-compiler", path = "crates/wgslx-compiler" }
 naga = { workspace = true, features = ["wgsl-in", "wgsl-out", "clone", "glsl-in", "glsl-out", "spv-in", "spv-out", "serialize", "deserialize"] }

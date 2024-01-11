@@ -1,0 +1,29 @@
+[package]
+name = "wgslx-compiler"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+codespan-reporting = "0.11"
+
+
+[dependencies.naga]
+version = "0.14"
+path = "../wgslx-wgpu/naga"
+features = [
+    "compact",
+    "wgsl-in",
+    "wgsl-out",
+    "glsl-in",
+    "glsl-out",
+    "spv-in",
+    "spv-out",
+    "msl-out",
+    "hlsl-out",
+    "dot-out",
+    "serialize",
+    "deserialize",
+]

@@ -63,13 +63,6 @@ struct Args {
   #[argh(switch)]
   compact: bool,
 
-  /// write the module's IR before compaction to the given file.
-  ///
-  /// This implies `--compact`. Like any other output file, the filename
-  /// extension determines the form in which the module is written.
-  #[argh(option)]
-  before_compaction: Option<String>,
-
   /// show version
   #[argh(switch)]
   version: bool,
@@ -88,13 +81,13 @@ struct Args {
 
 /// Newtype so we can implement [`FromStr`] for `BoundsCheckPolicy`.
 #[derive(Debug, Clone, Copy)]
-struct BoundsCheckPolicyArg(naga::proc::BoundsCheckPolicy);
+struct BoundsCheckPolicyArg(compiler::proc::BoundsCheckPolicy);
 
 impl FromStr for BoundsCheckPolicyArg {
   type Err = String;
 
   fn from_str(s: &str) -> Result<Self, Self::Err> {
-    use naga::proc::BoundsCheckPolicy;
+    use compiler::proc::BoundsCheckPolicy;
     Ok(Self(match s.to_lowercase().as_str() {
       "restrict" => BoundsCheckPolicy::Restrict,
       "readzeroskipwrite" => BoundsCheckPolicy::ReadZeroSkipWrite,
@@ -111,11 +104,11 @@ impl FromStr for BoundsCheckPolicyArg {
 
 #[derive(Default)]
 struct Parameters<'a> {
-  validation_flags: naga::valid::ValidationFlags,
-  bounds_check_policies: naga::proc::BoundsCheckPolicies,
+  validation_flags: compiler::valid::ValidationFlags,
+  bounds_check_policies: compiler::proc::BoundsCheckPolicies,
   keep_coordinate_space: bool,
-  spv_in: naga::front::spv::Options,
-  spv_out: naga::back::spv::Options<'a>,
+  spv_in: compiler::front::spv::Options,
+  spv_out: compiler::back::spv::Options<'a>,
 }
 
 trait PrettyResult {
@@ -185,7 +178,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", env!("CARGO_PKG_VERSION"));
     return Ok(());
   }
-  let (input_path, input) = if let Some(path) = args.files.first() {
+  let (input_path, _) = if let Some(path) = args.files.first() {
     let path = Path::new(path);
     (path, fs::read(path)?)
   } else if let Some(path) = &args.stdin_file_path {
@@ -199,7 +192,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
   // Update parameters from commandline arguments
   if let Some(bits) = args.validate {
-    params.validation_flags = naga::valid::ValidationFlags::from_bits(bits)
+    params.validation_flags = compiler::valid::ValidationFlags::from_bits(bits)
       .ok_or(CliError("Invalid validation flags"))?;
   }
   if let Some(policy) = args.index_bounds_check_policy {
@@ -218,7 +211,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     None => params.bounds_check_policies.index,
   };
 
-  params.spv_in = naga::front::spv::Options {
+  params.spv_in = compiler::front::spv::Options {
     adjust_coordinate_space: false,
     strict_capabilities: false,
     block_ctx_dump_prefix: None,
@@ -227,126 +220,18 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
   params.spv_out.bounds_check_policies = params.bounds_check_policies;
   params.spv_out.flags.set(
-    naga::back::spv::WriterFlags::ADJUST_COORDINATE_SPACE,
+    compiler::back::spv::WriterFlags::ADJUST_COORDINATE_SPACE,
     !params.keep_coordinate_space,
   );
 
-  let provider = wgslx_cli::FileProvider::new(); 
-
-  let (mut module, input_text) = match Path::new(&input_path)
-    .extension()
-    .ok_or(CliError("Input filename has no extension"))?
-    .to_str()
-    .ok_or(CliError("Input filename not valid unicode"))?
-  {
-    // For now, only wgslx is supported
-    "wgslx" => {
-      let input = String::from_utf8(input)?;
-      let id = provider.visit(input_path).expect("Unable to parse file"); 
-      let result = naga::front::wgsl::parse_module(&provider, id);
-
-      match result {
-        Ok(v) => (v, Some(input)),
-        Err(ref e) => {
-          e.emit_to_stderr_with_provider(&provider);
-          return Err(CliError("Could not parse WGSL").into());
-        }
-      }
-    }
-    _ => return Err(CliError("Unknown input file extension").into()),
-  };
-
-  // Include debugging information if requested.
-  // if args.generate_debug_symbols {
-  //   if let Some(ref input_text) = input_text {
-  //     params
-  //       .spv_out
-  //       .flags
-  //       .set(naga::back::spv::WriterFlags::DEBUG, true);
-  //     params.spv_out.debug_info = Some(naga::back::spv::DebugInfo {
-  //       source_code: input_text,
-  //       file_name: input_path,
-  //     })
-  //   } else {
-  //     eprintln!(
-  //       "warning: `--generate-debug-symbols` was passed, \
-  //        but input is not human-readable: {}",
-  //       input_path.display()
-  //     );
-  //   }
-  // }
-
-  // Decide which capabilities our output formats can support.
-  let validation_caps =
-    output_paths
-    .iter()
-    .fold(naga::valid::Capabilities::all(), |caps, path| {
-      use naga::valid::Capabilities as C;
-      let missing = match Path::new(path).extension().and_then(|ex| ex.to_str()) {
-        Some("wgsl") => C::CLIP_DISTANCE | C::CULL_DISTANCE,
-        Some("metal") => C::CULL_DISTANCE,
-        _ => C::empty(),
-      };
-      caps & !missing
-    });
-
-  // Validate the IR before compaction.
-  let info = match naga::valid::Validator::new(params.validation_flags, validation_caps)
-    .validate(&module)
-  {
-    Ok(info) => Some(info),
-    Err(error) => {
-      // Validation failure is not fatal. Just report the error.
-      if let Some(input) = &input_text {
-        let filename = input_path.file_name().and_then(std::ffi::OsStr::to_str);
-        emit_annotated_error(&error, filename.unwrap_or("input"), input);
-      }
-      print_err(&error);
-      None
-    }
-  };
-
-  // Compact the module, if requested.
-  let info = if args.compact || args.before_compaction.is_some() {
-    // Compact only if validation succeeded. Otherwise, compaction may panic.
-    if info.is_some() {
-      // Write out the module state before compaction, if requested.
-      if let Some(ref before_compaction) = args.before_compaction {
-        write_output(&module, &info, &params, before_compaction)?;
-      }
-
-      naga::compact::compact(&mut module);
-
-      // Re-validate the IR after compaction.
-      match naga::valid::Validator::new(params.validation_flags, validation_caps)
-        .validate(&module)
-      {
-        Ok(info) => Some(info),
-        Err(error) => {
-          // Validation failure is not fatal. Just report the error.
-          eprintln!("Error validating compacted module:");
-          if let Some(input) = &input_text {
-            let filename = input_path.file_name().and_then(std::ffi::OsStr::to_str);
-            emit_annotated_error(&error, filename.unwrap_or("input"), input);
-          }
-          print_err(&error);
-          None
-        }
-      }
-    } else {
-      eprintln!("Skipping compaction due to validation failure.");
-      None
-    }
-  } else {
-    info
-  };
+  let (module, module_info) = compiler::compile_module(input_path, args.compact)?; 
 
   // If no output was requested, then report validation results and stop here.
   //
   // If the user asked for output, don't stop: some output formats (".txt",
   // ".dot", ".bin") can be generated even without a `ModuleInfo`.
   if output_paths.is_empty() {
-    if info.is_some() {
+    if module_info.is_some() {
       println!("Validation successful");
       return Ok(());
     } else {
@@ -355,15 +240,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
   }
 
   for output_path in output_paths {
-    write_output(&module, &info, &params, output_path)?;
+    write_output(&module, &module_info, &params, output_path)?;
   }
 
   Ok(())
 }
 
 fn write_output(
-  module: &naga::Module,
-  info: &Option<naga::valid::ModuleInfo>,
+  module: &compiler::Module,
+  info: &Option<compiler::ModuleInfo>, 
   _params: &Parameters,
   output_path: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -375,7 +260,7 @@ fn write_output(
   {
     // For now, only WGSL out is supported
     "wgsl" => {
-      use naga::back::wgsl;
+      use compiler::back::wgsl;
 
       let wgsl = wgsl::write_string(
         module,
@@ -404,23 +289,7 @@ use codespan_reporting::{
     termcolor::{ColorChoice, StandardStream},
   },
 };
-use naga::{front::wgsl::source_provider::{SourceProvider}, WithSpan};
-
-pub fn emit_glsl_parser_error(errors: Vec<naga::front::glsl::Error>, filename: &str, source: &str) {
-  let files = SimpleFile::new(filename, source);
-  let config = codespan_reporting::term::Config::default();
-  let writer = StandardStream::stderr(ColorChoice::Auto);
-
-  for err in errors {
-    let mut diagnostic = Diagnostic::error().with_message(err.kind.to_string());
-
-    if let Some(range) = err.meta.to_range() {
-      diagnostic = diagnostic.with_labels(vec![Label::primary((), range)]);
-    }
-
-    term::emit(&mut writer.lock(), &config, &files, &diagnostic).expect("cannot write error");
-  }
-}
+use compiler::{WithSpan};
 
 pub fn emit_annotated_error<E: Error>(ann_err: &WithSpan<E>, filename: &str, source: &str) {
   let files = SimpleFile::new(filename, source);

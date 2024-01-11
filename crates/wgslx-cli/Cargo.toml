@@ -7,9 +7,6 @@ description = "Wgslx shader translation command line tool"
 keywords = ["shader", "wgsl", "wgslx", "WebGPU", "WebGPU Shading Language"]
 license = "MIT OR Apache-2.0"
 
-[lib]
-name = "wgslx_cli"
-
 [[bin]]
 name = "wgslx"
 path = "src/bin/wgslx.rs"
@@ -21,21 +18,4 @@ log = "0.4"
 codespan-reporting = "0.11"
 env_logger = "0.10"
 argh = "0.1.5"
-
-[dependencies.naga]
-version = "0.14"
-path = "../wgslx-wgpu/naga"
-features = [
-    "compact",
-    "wgsl-in",
-    "wgsl-out",
-    "glsl-in",
-    "glsl-out",
-    "spv-in",
-    "spv-out",
-    "msl-out",
-    "hlsl-out",
-    "dot-out",
-    "serialize",
-    "deserialize",
-]
+compiler = { package = "wgslx-compiler", path = "../wgslx-compiler"}

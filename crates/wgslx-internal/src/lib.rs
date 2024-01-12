@@ -3,11 +3,13 @@
 mod file_provider;
 
 use core::fmt;
+use std::fs;
 use std::path::Path;
 
 use codespan_reporting::diagnostic;
 use codespan_reporting::files::SimpleFile;
 use codespan_reporting::term;
+use naga::back::wgsl;
 use naga::compact::compact;
 pub use naga::proc;
 pub use naga::valid;
@@ -115,3 +117,43 @@ pub fn compile_module(input_path: impl AsRef<Path>, compact: bool) -> Result<(Mo
   Ok((module, info))
 }
 
+pub fn write_compiled_output_to_string(
+  module: &naga::Module,
+  info: &Option<ModuleInfo>,
+) -> Result<String, Box<dyn std::error::Error>> {
+  Ok(
+    wgsl::write_string(
+      module,
+      info.as_ref().ok_or(Error(
+        "Generating wgsl output requires validation to \
+         succeed, and it failed in a previous step",
+      ))?,
+      wgsl::WriterFlags::empty(),
+    )?)
+}
+
+
+pub fn write_compiled_output_to_file(
+  module: &naga::Module,
+  info: &Option<ModuleInfo>, 
+  output_path: impl AsRef<Path>,
+) -> Result<(), Box<dyn std::error::Error>> {
+  match Path::new(&output_path.as_ref())
+    .extension()
+    .ok_or(Error("Output filename has no extension"))?
+    .to_str()
+    .ok_or(Error("Output filename not valid unicode"))?
+  {
+    // For now, only WGSL out is supported
+    "wgsl" => {
+      let wgsl = write_compiled_output_to_string(module, info)?;
+
+      fs::write(output_path, wgsl)?;
+    }
+    other => {
+      println!("Unknown output extension: {other}");
+    }
+  }
+
+  Ok(())
+}

@@ -1,2 +1,3 @@
 
-pub use compiler::compile_module; 
+
+pub use internal::compile_module; 

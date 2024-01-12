@@ -5,25 +5,27 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[lib]
+crate-type = ["cdylib"]
+
 [workspace]
 members = [
   "crates/wgslx-wgpu/naga",
   "crates/wgslx-lsp", 
   "crates/wgslx-cli", 
   "crates/wgslx-bindgen",
-  "crates/wgslx-compiler"
+  "crates/wgslx-internal"
 ]
 default-members = [
   "crates/wgslx-wgpu/naga",
   "crates/wgslx-lsp", 
   "crates/wgslx-cli", 
   "crates/wgslx-bindgen", 
-  "crates/wgslx-compiler"
+  "crates/wgslx-internal"
 ]
 
 [workspace.dependencies.naga]
 path = "crates/wgslx-wgpu/naga"
 
 [dependencies]
-compiler = { package = "wgslx-compiler", path = "crates/wgslx-compiler" }
-naga = { workspace = true, features = ["wgsl-in", "wgsl-out", "clone", "glsl-in", "glsl-out", "spv-in", "spv-out", "serialize", "deserialize"] }
+internal = { package = "wgslx-internal", path = "crates/wgslx-internal" }

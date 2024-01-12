@@ -81,13 +81,13 @@ struct Args {
 
 /// Newtype so we can implement [`FromStr`] for `BoundsCheckPolicy`.
 #[derive(Debug, Clone, Copy)]
-struct BoundsCheckPolicyArg(compiler::proc::BoundsCheckPolicy);
+struct BoundsCheckPolicyArg(internal::proc::BoundsCheckPolicy);
 
 impl FromStr for BoundsCheckPolicyArg {
   type Err = String;
 
   fn from_str(s: &str) -> Result<Self, Self::Err> {
-    use compiler::proc::BoundsCheckPolicy;
+    use internal::proc::BoundsCheckPolicy;
     Ok(Self(match s.to_lowercase().as_str() {
       "restrict" => BoundsCheckPolicy::Restrict,
       "readzeroskipwrite" => BoundsCheckPolicy::ReadZeroSkipWrite,
@@ -104,11 +104,11 @@ impl FromStr for BoundsCheckPolicyArg {
 
 #[derive(Default)]
 struct Parameters<'a> {
-  validation_flags: compiler::valid::ValidationFlags,
-  bounds_check_policies: compiler::proc::BoundsCheckPolicies,
+  validation_flags: internal::valid::ValidationFlags,
+  bounds_check_policies: internal::proc::BoundsCheckPolicies,
   keep_coordinate_space: bool,
-  spv_in: compiler::front::spv::Options,
-  spv_out: compiler::back::spv::Options<'a>,
+  spv_in: internal::front::spv::Options,
+  spv_out: internal::back::spv::Options<'a>,
 }
 
 trait PrettyResult {
@@ -192,7 +192,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
   // Update parameters from commandline arguments
   if let Some(bits) = args.validate {
-    params.validation_flags = compiler::valid::ValidationFlags::from_bits(bits)
+    params.validation_flags = internal::valid::ValidationFlags::from_bits(bits)
       .ok_or(CliError("Invalid validation flags"))?;
   }
   if let Some(policy) = args.index_bounds_check_policy {
@@ -211,7 +211,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     None => params.bounds_check_policies.index,
   };
 
-  params.spv_in = compiler::front::spv::Options {
+  params.spv_in = internal::front::spv::Options {
     adjust_coordinate_space: false,
     strict_capabilities: false,
     block_ctx_dump_prefix: None,
@@ -220,11 +220,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
   params.spv_out.bounds_check_policies = params.bounds_check_policies;
   params.spv_out.flags.set(
-    compiler::back::spv::WriterFlags::ADJUST_COORDINATE_SPACE,
+    internal::back::spv::WriterFlags::ADJUST_COORDINATE_SPACE,
     !params.keep_coordinate_space,
   );
 
-  let (module, module_info) = compiler::compile_module(input_path, args.compact)?; 
+  let (module, module_info) = internal::compile_module(input_path, args.compact)?; 
 
   // If no output was requested, then report validation results and stop here.
   //
@@ -247,8 +247,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn write_output(
-  module: &compiler::Module,
-  info: &Option<compiler::ModuleInfo>, 
+  module: &internal::Module,
+  info: &Option<internal::ModuleInfo>, 
   _params: &Parameters,
   output_path: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -260,7 +260,7 @@ fn write_output(
   {
     // For now, only WGSL out is supported
     "wgsl" => {
-      use compiler::back::wgsl;
+      use internal::back::wgsl;
 
       let wgsl = wgsl::write_string(
         module,
@@ -289,7 +289,7 @@ use codespan_reporting::{
     termcolor::{ColorChoice, StandardStream},
   },
 };
-use compiler::{WithSpan};
+use internal::{WithSpan};
 
 pub fn emit_annotated_error<E: Error>(ann_err: &WithSpan<E>, filename: &str, source: &str) {
   let files = SimpleFile::new(filename, source);

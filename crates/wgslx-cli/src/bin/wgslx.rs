@@ -116,7 +116,7 @@ trait PrettyResult {
   fn unwrap_pretty(self) -> Self::Target;
 }
 
-fn print_err(error: &dyn Error) {
+fn print_err(error: &dyn std::error::Error) {
   eprint!("{error}");
 
   let mut e = error.source();
@@ -279,31 +279,4 @@ fn write_output(
   }
 
   Ok(())
-}
-
-use codespan_reporting::{
-  diagnostic::{Diagnostic, Label},
-  files::{SimpleFile},
-  term::{
-    self,
-    termcolor::{ColorChoice, StandardStream},
-  },
-};
-use internal::{WithSpan};
-
-pub fn emit_annotated_error<E: Error>(ann_err: &WithSpan<E>, filename: &str, source: &str) {
-  let files = SimpleFile::new(filename, source);
-  let config = codespan_reporting::term::Config::default();
-  let writer = StandardStream::stderr(ColorChoice::Auto);
-
-  let diagnostic = Diagnostic::error().with_labels(
-    ann_err
-      .spans()
-      .map(|(span, desc)| {
-        Label::primary((), span.to_range().unwrap()).with_message(desc.to_owned())
-      })
-      .collect(),
-  );
-
-  term::emit(&mut writer.lock(), &config, &files, &diagnostic).expect("cannot write error");
 }

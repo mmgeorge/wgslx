@@ -10,7 +10,6 @@ use codespan_reporting::diagnostic;
 use codespan_reporting::files::SimpleFile;
 use codespan_reporting::term;
 use naga::back::wgsl;
-use naga::compact::compact;
 pub use naga::proc;
 pub use naga::valid;
 pub use naga::front;
@@ -75,11 +74,11 @@ pub fn compile_module(input_path: impl AsRef<Path>, compact: bool) -> Result<(Mo
         Ok(v) => Ok(v),
         Err(ref e) => {
           e.emit_to_stderr_with_provider(&provider);
-          return Err(Error("Could not parse WGSL").into());
+          return Err(Error("Could not parse WGSL"));
         }
       }
     }
-    _ => return Err(Error("Unknown input file extension").into()),
+    _ => return Err(Error("Unknown input file extension")),
   }?;
 
   let mut validator = valid::Validator::new(valid::ValidationFlags::all(), valid::Capabilities::all());
@@ -87,9 +86,7 @@ pub fn compile_module(input_path: impl AsRef<Path>, compact: bool) -> Result<(Mo
     Ok(info) => Some(info),
     Err(error) => {
       // Validation failure is not fatal. Just report the error.
-      let _filename = input_path.as_ref().file_name().and_then(std::ffi::OsStr::to_str);
-      // emit_annotated_error(&error, filename.unwrap_or("input"), input);
-      // print_err(&error);
+      error.emit_to_stderr_with_provider(&provider); 
       None
     }
   };
@@ -105,13 +102,10 @@ pub fn compile_module(input_path: impl AsRef<Path>, compact: bool) -> Result<(Mo
       Ok(info) => Some(info),
       Err(error) => {
         // Validation failure is not fatal. Just report the error.
-        let _filename = input_path.as_ref().file_name().and_then(std::ffi::OsStr::to_str);
-        // emit_annotated_error(&error, filename.unwrap_or("input"), input);
-        // print_err(&error);
+        error.emit_to_stderr_with_provider(&provider); 
         None
       }
     };
-    
   }
 
   Ok((module, info))

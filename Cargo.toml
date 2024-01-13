@@ -9,14 +9,16 @@ members = [
   "crates/wgslx-lsp", 
   "crates/wgslx-cli", 
   "crates/wgslx-bindgen",
-  "crates/wgslx-internal"
+  "crates/wgslx-internal",
+  "tests"
 ]
 default-members = [
   "crates/wgslx-wgpu/naga",
   "crates/wgslx-lsp", 
   "crates/wgslx-cli", 
   "crates/wgslx-bindgen", 
-  "crates/wgslx-internal"
+  "crates/wgslx-internal", 
+  "tests"
 ]
 
 [workspace.dependencies.naga]

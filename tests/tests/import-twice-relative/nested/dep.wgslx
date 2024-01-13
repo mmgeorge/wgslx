@@ -1,0 +1,6 @@
+
+@import "../twice.wgslx"
+
+fn get_foo() -> f32 {
+  return FOO; 
+}

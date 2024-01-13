@@ -1,0 +1,7 @@
+
+@import "twice.wgslx"
+@import "nested/dep.wgslx"
+
+fn foo() -> f32 {
+  return get_foo() * FOO;
+}

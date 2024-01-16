@@ -1,6 +1,7 @@
 
 
 mod file_provider;
+mod module_source_provider;
 
 use core::fmt;
 use std::fs;
@@ -9,6 +10,7 @@ use std::path::Path;
 use codespan_reporting::diagnostic;
 use codespan_reporting::files::SimpleFile;
 use codespan_reporting::term;
+use module_source_provider::ModuleSourceProvider;
 use naga::back::wgsl;
 pub use naga::proc;
 pub use naga::valid;
@@ -109,6 +111,40 @@ pub fn compile_module(input_path: impl AsRef<Path>, compact: bool) -> Result<(Mo
   }
 
   Ok((module, info))
+}
+
+pub fn compile_module2(root_path: impl AsRef<Path>, compact: bool) -> Result<(Module, Option<ModuleInfo>), Error> {
+  let provider = ModuleSourceProvider::new(&root_path);
+
+  let lib_file = provider.visit("lib.wgslx")
+    .ok_or(Error("Unable to find lib.wgslx. Does the file exist?"))?;
+
+  let mut module = parse_module(&provider, lib_file).map_err(|error| {
+    error.emit_to_stderr_with_provider(&provider); 
+    Error("Parsing failed.")
+  })?; 
+
+  let mut validator = valid::Validator::new(valid::ValidationFlags::all(), valid::Capabilities::all());
+  let info = validator.validate(&module).map_err(|error| {
+    error.emit_to_stderr_with_provider(&provider); 
+    Error("Validation failed.")
+  })?; 
+
+  // No compaction required, early out
+  if !compact {
+    return Ok((module, Some(info)))
+  }
+
+  naga::compact::compact(&mut module);
+
+  // Revalidate compacted module
+  let mut validator = valid::Validator::new(valid::ValidationFlags::all(), valid::Capabilities::all());
+  let info = validator.validate(&module).map_err(|error| {
+    error.emit_to_stderr_with_provider(&provider); 
+    Error("Compaction failed. Compacted module failed validation")
+  })?;
+
+  Ok((module, Some(info)))
 }
 
 pub fn write_compiled_output_to_string(

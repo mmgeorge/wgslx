@@ -1,7 +1,8 @@
 
 @import "twice.wgslx"
-@import "dep.wgslx"
+// @import "dep.wgslx"
 
 fn foo() -> f32 {
-  return get_foo() * FOO;
+  return FOO; 
+  // return get_foo() * FOO;
 }

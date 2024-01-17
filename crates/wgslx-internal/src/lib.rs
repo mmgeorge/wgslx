@@ -1,6 +1,5 @@
 
 
-mod file_provider;
 mod module_source_provider;
 
 use core::fmt;
@@ -23,7 +22,6 @@ pub use naga::WithSpan;
 pub use naga::front::wgsl::source_provider::SourceProvider; 
 pub use naga::front::wgsl::parse_module; 
 
-pub use file_provider::FileProvider;
 pub use naga::valid::ModuleInfo;
 
 /// Error type for the CLI
@@ -56,64 +54,7 @@ pub fn emit_annotated_error<E: std::error::Error>(ann_err: &WithSpan<E>, filenam
   term::emit(&mut writer.lock(), &config, &files, &diagnostic).expect("cannot write error");
 }
 
-pub fn compile_module(input_path: impl AsRef<Path>, compact: bool) -> Result<(Module, Option<ModuleInfo>), Error> {
-  let provider = FileProvider::new(); 
-
-  let mut module = match input_path.as_ref()
-    .extension()
-    .ok_or(Error("Input filename has no extension"))?
-    .to_str()
-    .ok_or(Error("Input filename not valid unicode"))?
-  {
-    // For now, only wgslx is supported
-    "wgslx" => {
-      // let input = String::from_utf8(input)?;
-      let id = provider.visit(&input_path).expect("Unable to parse file"); 
-
-      let result = parse_module(&provider, id); 
-
-      match result {
-        Ok(v) => Ok(v),
-        Err(ref e) => {
-          e.emit_to_stderr_with_provider(&provider);
-          return Err(Error("Could not parse WGSL"));
-        }
-      }
-    }
-    _ => return Err(Error("Unknown input file extension")),
-  }?;
-
-  let mut validator = valid::Validator::new(valid::ValidationFlags::all(), valid::Capabilities::all());
-  let mut info = match validator.validate(&module) {
-    Ok(info) => Some(info),
-    Err(error) => {
-      // Validation failure is not fatal. Just report the error.
-      error.emit_to_stderr_with_provider(&provider); 
-      None
-    }
-  };
-
-  // Compact module if requested
-  if compact {
-    naga::compact::compact(&mut module);
-
-    let mut validator = valid::Validator::new(valid::ValidationFlags::all(), valid::Capabilities::all());
-
-    // Revalidate compacted module
-    info = match validator.validate(&module) {
-      Ok(info) => Some(info),
-      Err(error) => {
-        // Validation failure is not fatal. Just report the error.
-        error.emit_to_stderr_with_provider(&provider); 
-        None
-      }
-    };
-  }
-
-  Ok((module, info))
-}
-
-pub fn compile_module2(root_path: impl AsRef<Path>, compact: bool) -> Result<(Module, Option<ModuleInfo>), Error> {
+pub fn compile_module(root_path: impl AsRef<Path>, compact: bool) -> Result<(Module, Option<ModuleInfo>), Error> {
   let provider = ModuleSourceProvider::new(&root_path);
 
   let lib_file = provider.visit("lib.wgslx")

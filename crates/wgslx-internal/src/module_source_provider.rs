@@ -10,6 +10,7 @@ use naga::front::wgsl::source_provider::FileId;
 use std::path::PathBuf;
 use std::collections::HashMap;
 
+#[derive(Debug)]
 pub struct ModuleSourceProvider {
   inner: UnsafeCell<Inner>
 }
@@ -19,6 +20,31 @@ impl ModuleSourceProvider {
     Self {
       inner: Inner::new(root).into()
     }
+  }
+}
+
+impl ModuleSourceProvider {
+  pub fn insert(&self, path: impl AsRef<Path>, source: &str) -> FileId {
+    unsafe {
+      let inner = &mut *self.inner.get();
+
+      inner.insert(path.as_ref().to_owned(), source.to_owned())
+    }
+  }
+
+  pub fn update(&self, path: impl AsRef<Path>) -> FileId {
+    unsafe {
+      let inner = &mut *self.inner.get();
+
+      inner.update(path.as_ref().to_owned())
+    }
+  }
+
+  pub fn span_source(&self, span: &naga::Span) -> Option<&str> {
+    let id = span.file_id?;
+    let file = self.get(id)?;
+
+    Some(file.source())
   }
 }
 
@@ -105,5 +131,25 @@ impl Inner {
 
   pub fn get(&self, id: FileId) -> Option<&File> {
     self.files.get(&id)
+  }
+
+  pub fn update(&mut self, path: PathBuf) -> FileId {
+    let id = self.visit(&path).unwrap();
+    let file = self.files.get_mut(&id).unwrap();
+    let source = fs::read_to_string(&path)
+      .expect("Unable to read string"); 
+
+    file.source = source;
+
+    id
+  }
+
+  pub fn insert(&mut self, path: PathBuf, source: String) -> FileId {
+    let id = self.visit(path).unwrap();
+    let file = self.files.get_mut(&id).unwrap();
+
+    file.source = source;
+
+    id
   }
 }

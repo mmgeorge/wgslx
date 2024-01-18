@@ -1,5 +1,4 @@
 
-
 mod module_source_provider;
 
 use core::fmt;
@@ -9,7 +8,7 @@ use std::path::Path;
 use codespan_reporting::diagnostic;
 use codespan_reporting::files::SimpleFile;
 use codespan_reporting::term;
-use module_source_provider::ModuleSourceProvider;
+pub use module_source_provider::ModuleSourceProvider;
 use naga::back::wgsl;
 pub use naga::proc;
 pub use naga::valid;

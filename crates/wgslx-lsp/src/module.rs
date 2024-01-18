@@ -1,7 +1,7 @@
+use internal::ModuleSourceProvider;
 use naga::{front::wgsl::{source_provider::{FileId, Files}, parse_module}, valid::{Validator, Capabilities, ValidationFlags}, NamedExpression, Expression, TypeInner};
-use crate::{file_sources::FileSources, module::format::format_type};
 
-use self::{error::Error, diagnostic::Diagnostic, search_position::SearchPosition, definition::Definition, completion_canditate::{CompletionCandiate, CompletionKind}, format::format_function_definition};
+use self::{error::Error, diagnostic::Diagnostic, search_position::SearchPosition, definition::Definition, completion_canditate::{CompletionCandiate, CompletionKind}, format::{format_function_definition, format_type}};
 
 pub mod error;
 pub mod diagnostic;
@@ -29,7 +29,7 @@ pub struct Module {
 
 impl Module {
 
-  pub fn from(sources: &FileSources, id: FileId) -> Result<Module, Error> {
+  pub fn from(sources: &internal::ModuleSourceProvider, id: FileId) -> Result<Module, Error> {
     let module = parse_module(sources, id)?;
 
     Ok(Self { inner: module })
@@ -39,7 +39,7 @@ impl Module {
     &self.inner
   }
 
-  pub fn diagnostics(provider: &FileSources, id: FileId) -> Vec<Diagnostic> {
+  pub fn diagnostics(provider: &ModuleSourceProvider, id: FileId) -> Vec<Diagnostic> {
     if let Err(error) = Self::validate(provider, id) {
       return error.into(); 
     }
@@ -47,7 +47,7 @@ impl Module {
     vec![]
   }
 
-  fn validate(provider: &FileSources, id: FileId) -> Result<(), Error> {
+  fn validate(provider: &ModuleSourceProvider, id: FileId) -> Result<(), Error> {
     let module = parse_module(provider, id)?;
     let mut validator = Validator::new(ValidationFlags::all(), Capabilities::all());
 
@@ -98,7 +98,7 @@ impl Module {
       })
   }
 
-  pub fn find_definition_at<'a>(&'a self, sources: &'a FileSources, pos: SearchPosition) -> Option<Definition<'a>> {
+  pub fn find_definition_at<'a>(&'a self, sources: &'a ModuleSourceProvider, pos: SearchPosition) -> Option<Definition<'a>> {
     // First check expressions at the module level
     if let Some((.., expr)) = Self::find_closest_at(&self.inner.const_expressions, pos) {
       return Definition::try_from_expression(&self.inner, None, expr, false)
@@ -115,7 +115,7 @@ impl Module {
     None
   }
 
-  pub fn find_hoverable_at<'a>(&'a self, sources: &'a FileSources, pos: SearchPosition) -> Option<Definition<'a>> {
+  pub fn find_hoverable_at<'a>(&'a self, sources: &'a ModuleSourceProvider, pos: SearchPosition) -> Option<Definition<'a>> {
     if let Some((handle, ..)) = Self::find_closest_at(&self.inner.global_variables, pos) {
       return Some(Definition::GlobalVariable(handle))
     }
@@ -137,7 +137,7 @@ impl Module {
     None
   }
 
-  pub fn find_completion_candidates_at2<'a>(&'a self, sources: &'a FileSources, changed: &'a FileSources, pos: SearchPosition, pos_changed: SearchPosition) -> Option<Vec<CompletionCandiate>> {
+  pub fn find_completion_candidates_at2<'a>(&'a self, sources: &'a ModuleSourceProvider, changed: &'a ModuleSourceProvider, pos: SearchPosition, pos_changed: SearchPosition) -> Option<Vec<CompletionCandiate>> {
     // Get completion type
     let source = changed.source(pos_changed.file_id).unwrap();
     let substr = &source[..pos_changed.location];
@@ -294,7 +294,7 @@ impl Module {
     Some(types.chain(standard_types).collect())
   }
 
-  pub fn find_definition_completion_candidates_at<'a>(&'a self, sources: &'a FileSources, pos: SearchPosition) -> Option<Vec<CompletionCandiate>> {
+  pub fn find_definition_completion_candidates_at<'a>(&'a self, sources: &'a ModuleSourceProvider, pos: SearchPosition) -> Option<Vec<CompletionCandiate>> {
     let globals = self.inner.global_variables.iter()
       .map(|(_, var)| {
         let ty_str = format_type(&self.inner, &self.inner.types[var.ty]);
@@ -356,14 +356,14 @@ impl Module {
     Some(out)
   }
 
-  pub fn find_type_at<'a>(&'a self, sources: &'a FileSources, pos: SearchPosition) -> Option<&'a naga::Type> {
+  pub fn find_type_at<'a>(&'a self, sources: &'a ModuleSourceProvider, pos: SearchPosition) -> Option<&'a naga::Type> {
     let definition = self.find_definition_at(sources, pos)?;
     let ty = &definition.get_type(&self.inner);
 
     Some(&self.inner.types[*ty])
   }
 
-  pub fn find_definition_at_function_result<'a>(&'a self, sources: &'a FileSources, pos: SearchPosition, func: &'a naga::Function) -> Option<Definition<'a>> {
+  pub fn find_definition_at_function_result<'a>(&'a self, sources: &'a ModuleSourceProvider, pos: SearchPosition, func: &'a naga::Function) -> Option<Definition<'a>> {
     let result = &func.result.clone()?;
 
     if pos.inside(&result.ty_span) {
@@ -373,7 +373,7 @@ impl Module {
     None
   }
 
-  pub fn find_definition_at_function<'a>(&'a self, sources: &'a FileSources, pos: SearchPosition, func: &'a naga::Function) -> Option<Definition<'a>> {
+  pub fn find_definition_at_function<'a>(&'a self, sources: &'a ModuleSourceProvider, pos: SearchPosition, func: &'a naga::Function) -> Option<Definition<'a>> {
     // Check named uses
     if let Some((.., named_use)) = Self::find_closest_at(&func.named_uses, pos) {
       return Definition::try_from_named_use(Some(func), named_use)
@@ -391,7 +391,7 @@ impl Module {
     None
   }
 
-  pub fn find_hoverable_at_function<'a>(&'a self, sources: &'a FileSources, pos: SearchPosition, func: &'a naga::Function) -> Option<Definition<'a>> {
+  pub fn find_hoverable_at_function<'a>(&'a self, sources: &'a ModuleSourceProvider, pos: SearchPosition, func: &'a naga::Function) -> Option<Definition<'a>> {
     if let Some((handle, ..)) = Self::find_closest_at(&func.local_variables, pos) {
       eprintln!("Got local var!"); 
       return Some(Definition::LocalVariable(func, handle))
@@ -405,7 +405,7 @@ impl Module {
     // None
   }
 
-  pub fn find_closest_named_expression_at<'a>(sources: &'a FileSources, pos: SearchPosition, func: &'a naga::Function) -> Option<(naga::Handle<Expression>, &'a NamedExpression)> {
+  pub fn find_closest_named_expression_at<'a>(sources: &'a ModuleSourceProvider, pos: SearchPosition, func: &'a naga::Function) -> Option<(naga::Handle<Expression>, &'a NamedExpression)> {
     let item = func.named_expressions.iter()
       .map(|(handle, item)| (handle, item, item.span))
       .filter(move |(.., span)| pos.inside(span))

@@ -23,7 +23,6 @@ pub enum CompletionType {
 }
 
 pub struct Module {
-  // sources: &'a FileSources,
   inner: naga::Module
 }
 
@@ -54,11 +53,6 @@ impl Module {
     validator.validate(&module)?; 
 
     Ok(())
-  }
-
-  fn arena_iter<T>(arena: &naga::Arena<T>) -> impl Iterator<Item = (&T, naga::Span)> {
-    arena.iter()
-      .map(|(handle, var)| (var, arena.get_span(handle)))
   }
 
   fn find_closest_at<T>(arena: &naga::Arena<T>, pos: SearchPosition) -> Option<(naga::Handle<T>, &T)> {
@@ -294,7 +288,7 @@ impl Module {
     Some(types.chain(standard_types).collect())
   }
 
-  pub fn find_definition_completion_candidates_at<'a>(&'a self, sources: &'a ModuleSourceProvider, pos: SearchPosition) -> Option<Vec<CompletionCandiate>> {
+  pub fn find_definition_completion_candidates_at<'a>(&'a self, _sources: &'a ModuleSourceProvider, pos: SearchPosition) -> Option<Vec<CompletionCandiate>> {
     let globals = self.inner.global_variables.iter()
       .map(|(_, var)| {
         let ty_str = format_type(&self.inner, &self.inner.types[var.ty]);
@@ -356,14 +350,14 @@ impl Module {
     Some(out)
   }
 
-  pub fn find_type_at<'a>(&'a self, sources: &'a ModuleSourceProvider, pos: SearchPosition) -> Option<&'a naga::Type> {
-    let definition = self.find_definition_at(sources, pos)?;
-    let ty = &definition.get_type(&self.inner);
+  // pub fn find_type_at<'a>(&'a self, sources: &'a ModuleSourceProvider, pos: SearchPosition) -> Option<&'a naga::Type> {
+  //   let definition = self.find_definition_at(sources, pos)?;
+  //   let ty = &definition.get_type(&self.inner);
 
-    Some(&self.inner.types[*ty])
-  }
+  //   Some(&self.inner.types[*ty])
+  // }
 
-  pub fn find_definition_at_function_result<'a>(&'a self, sources: &'a ModuleSourceProvider, pos: SearchPosition, func: &'a naga::Function) -> Option<Definition<'a>> {
+  pub fn find_definition_at_function_result<'a>(&'a self, _sources: &'a ModuleSourceProvider, pos: SearchPosition, func: &'a naga::Function) -> Option<Definition<'a>> {
     let result = &func.result.clone()?;
 
     if pos.inside(&result.ty_span) {
@@ -405,7 +399,7 @@ impl Module {
     // None
   }
 
-  pub fn find_closest_named_expression_at<'a>(sources: &'a ModuleSourceProvider, pos: SearchPosition, func: &'a naga::Function) -> Option<(naga::Handle<Expression>, &'a NamedExpression)> {
+  pub fn find_closest_named_expression_at<'a>(_sources: &'a ModuleSourceProvider, pos: SearchPosition, func: &'a naga::Function) -> Option<(naga::Handle<Expression>, &'a NamedExpression)> {
     let item = func.named_expressions.iter()
       .map(|(handle, item)| (handle, item, item.span))
       .filter(move |(.., span)| pos.inside(span))

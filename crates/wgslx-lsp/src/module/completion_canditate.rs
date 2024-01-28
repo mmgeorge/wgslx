@@ -5,7 +5,7 @@ pub enum CompletionKind {
   Function,
   Property,
   Variable,
-  Struct,
+  // Struct,
   Type,
   Constant
 }
@@ -35,7 +35,7 @@ impl Into<lsp_types::CompletionItem> for CompletionCandiate {
         CompletionKind::Property => CompletionItemKind::PROPERTY,
         CompletionKind::Variable => CompletionItemKind::VARIABLE,
         CompletionKind::Constant => CompletionItemKind::CONSTANT,
-        CompletionKind::Struct => CompletionItemKind::STRUCT,
+        // CompletionKind::Struct => CompletionItemKind::STRUCT,
         CompletionKind::Type => CompletionItemKind::TYPE_PARAMETER,
     }), 
       ..Default::default()

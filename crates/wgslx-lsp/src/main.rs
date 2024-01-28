@@ -128,7 +128,7 @@ impl LanguageServer for WgslxLanguageServer {
     Ok(())
   }
 
-  async fn did_open(&self, params: DidOpenTextDocumentParams) {
+  async fn did_open(&self, _params: DidOpenTextDocumentParams) {
     self.client.log_message(MessageType::INFO, "file opened!").await; 
   }
 
@@ -136,7 +136,6 @@ impl LanguageServer for WgslxLanguageServer {
     self.client.log_message(MessageType::INFO, format!("changed! {}", params.text_document.uri)).await;
 
     self.sources_changed().insert(params.text_document.uri.path(), &params.content_changes[0].text); 
-    // self.changes.insert(params);
   }
 
   async fn did_save(&self, params: DidSaveTextDocumentParams) {

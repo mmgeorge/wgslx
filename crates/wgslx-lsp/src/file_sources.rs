@@ -36,62 +36,62 @@ impl FileSourcesInner {
     *entry
   }
 
-  pub fn insert(&mut self, path: PathBuf, source: String) -> FileId {
-    let id = self.ensure(path).unwrap();
-    let file = self.files.get_mut(&id).unwrap();
+  // pub fn _insert(&mut self, path: PathBuf, source: String) -> FileId {
+  //   let id = self.ensure(path).unwrap();
+  //   let file = self.files.get_mut(&id).unwrap();
 
-    file.source = source;
+  //   file.source = source;
 
-    id
-  }
+  //   id
+  // }
 
-  pub fn update(&mut self, path: PathBuf) -> FileId {
-    let id = self.ensure(&path).unwrap();
-    let file = self.files.get_mut(&id).unwrap();
-    let source = fs::read_to_string(&path)
-      .expect("Unable to read string"); 
+  // pub fn _update(&mut self, path: PathBuf) -> FileId {
+  //   let id = self.ensure(&path).unwrap();
+  //   let file = self.files.get_mut(&id).unwrap();
+  //   let source = fs::read_to_string(&path)
+  //     .expect("Unable to read string"); 
 
-    file.source = source;
+  //   file.source = source;
 
-    id
-  }
+  //   id
+  // }
 }
 
 impl FileSources {
-  pub fn new() -> Self {
-    Self {
-      inner: FileSourcesInner {
-        ids: HashMap::new(),
-        files: HashMap::new(),
-        counter: 0
-      }.into()
-    }
-  }
+  // pub fn new() -> Self {
+  //   Self {
+  //     inner: FileSourcesInner {
+  //       ids: HashMap::new(),
+  //       files: HashMap::new(),
+  //       counter: 0
+  //     }.into()
+  //   }
+  // }
 }
 
 impl FileSources {
-  pub fn insert(&self, path: impl AsRef<Path>, source: &str) -> FileId {
-    unsafe {
-      let inner = &mut *self.inner.get();
+  // pub fn _insert(&self, path: impl AsRef<Path>, source: &str) -> FileId {
+  //   unsafe {
+  //     let inner = &mut *self.inner.get();
 
-      inner.insert(path.as_ref().to_owned(), source.to_owned())
-    }
-  }
+  //     inner.insert(path.as_ref().to_owned(), source.to_owned())
+  //   }
+  // }
 
-  pub fn update(&self, path: impl AsRef<Path>) -> FileId {
-    unsafe {
-      let inner = &mut *self.inner.get();
+  // pub fn _update(&self, path: impl AsRef<Path>) -> FileId {
+  //   unsafe {
+  //     let inner = &mut *self.inner.get();
 
-      inner.update(path.as_ref().to_owned())
-    }
-  }
+  //     inner.update(path.as_ref().to_owned())
+  //   }
+  // }
 
-  pub fn span_source(&self, span: &naga::Span) -> Option<&str> {
-    let id = span.file_id?;
-    let file = self.get(id)?;
+  // pub fn _span_source(&self, span: &naga::Span) -> Option<&str> {
+  //   let id = span.file_id?;
+  //   let file = self.get(id)?;
 
-    Some(file.source())
-  }
+  //   Some(file.source())
+  // }
 }
 
 impl source_provider::SourceProvider<'_> for FileSources {

@@ -23,7 +23,11 @@ impl SearchPosition {
   pub fn location(sources: &ModuleSourceProvider, pos: lsp_types::Position, file_id: FileId) -> usize {
     let source = sources.source(file_id).unwrap(); 
     let line_offset = if pos.line > 0 {
-      source.match_indices('\n').nth(pos.line as usize - 1).unwrap().0
+      source.match_indices('\n').nth(pos.line as usize - 1)
+        .unwrap_or_else(|| {
+          eprintln!("InternalError: Unable to find line offset. Position:{:?}", pos);
+          (0, "")
+        }).0
     }
     else {
       0

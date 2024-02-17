@@ -110,7 +110,7 @@ impl LanguageServer for WgslxLanguageServer {
           ..Default::default()
         })),
         position_encoding: Some(PositionEncodingKind::UTF8),
-        hover_provider: Some(HoverProviderCapability::Simple(true)),
+        hover_provider: None, //Some(HoverProviderCapability::Simple(true)),
         completion_provider: Some(CompletionOptions {
           ..Default::default()
         }),

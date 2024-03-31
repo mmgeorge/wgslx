@@ -1,0 +1,39 @@
+{
+  "name": "wgslx",
+  "displayName": "WebGPU Shading Language eXtended",
+  "description": "",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.87.0"
+  },
+  "repository": {
+    "url": "https://github.com/mmgeorge/wgslx-vscode",
+    "type": "git"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "wgslx",
+        "aliases": [
+          "WebGPU Shading Language eXtended",
+          "wgslx"
+        ],
+        "extensions": [
+          ".wgslx",
+          ".wgsl"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "wgslx",
+        "scopeName": "source.wgslx",
+        "path": "./syntaxes/wgslx.tmLanguage.json"
+      }
+    ]
+  }
+}

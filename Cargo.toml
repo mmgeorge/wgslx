@@ -6,19 +6,21 @@ edition = "2021"
 [workspace]
 members = [
   "crates/wgslx-wgpu/naga",
-  "crates/wgslx-lsp", 
-  "crates/wgslx-cli", 
+  "crates/wgslx-lsp",
+  "crates/wgslx-cli",
   "crates/wgslx-bindgen",
   "crates/wgslx-internal",
-  "tests"
+  "tests",
+  "xtask",
 ]
 default-members = [
   "crates/wgslx-wgpu/naga",
-  "crates/wgslx-lsp", 
-  "crates/wgslx-cli", 
-  "crates/wgslx-bindgen", 
-  "crates/wgslx-internal", 
-  "tests"
+  "crates/wgslx-lsp",
+  "crates/wgslx-cli",
+  "crates/wgslx-bindgen",
+  "crates/wgslx-internal",
+  "tests",
+  "xtask",
 ]
 
 [workspace.dependencies.naga]
